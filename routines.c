@@ -1155,7 +1155,7 @@ void calculate_stuff( PARTICLE *bh, SI *si) {
 ** Routine for converting velocities from internal units to the sytems of units determined by "velConvert" **(definitions.h). Offsests are set here as well.
 */
 
-void displace(SI *si){
+void displace(SI *si,PARTICLE *bh){
 
   PARTICLE *p;
   PARTICLE *pstar;
@@ -1177,6 +1177,13 @@ void displace(SI *si){
     for(j = 0; j < 3 ; j++){
       pstar[i].r[j+1] = pstar[i].r[j+1] + si->deltapos[j];
       pstar[i].v[j+1] = pstar[i].v[j+1]*velConvert + si->deltavel[j];	
+    }
+  }
+
+  if (bh->mass > 0) {
+    for(j = 0; j< 3 ; j++){
+      bh->r[j+1] += si->deltapos[j];
+      bh->v[j+1] = bh->v[j+1]*velConvert + si->deltavel[j];
     }
   }
 }
@@ -1290,6 +1297,7 @@ void usage() {
   fprintf(stderr,"-ogr                : set this flag for outputting grid in r in an ASCII file\n");
   fprintf(stderr,"-ogdf               : set this flag for outputting grid for distribution function in an ASCII file\n");
   fprintf(stderr,"-ogb                : set this flag for generating a GADGET2 initial conditions binary file\n");
+  fprintf(stderr,"-ogh                : set this flag for generating a GIZMO initial conditions HDF5 file\n");
   fprintf(stderr,"-otb                : set this flag for generating a TIPSY initial conditions binary file\n");
   fprintf(stderr,"-oift               : set this flag to write positions for IFRIT binary file \n");
   fprintf(stderr,"-opfs               : set this flag to write a table of density profiles in an ASCII file\n");

@@ -25,5 +25,5 @@ void usage(void);
 void transfer_particles(const PARTICLE (*),const SI (*), TIPSY_STRUCTURE (*));
 void select_stars(SI (*));
 void set_lighttomass(SI (*));
-void displace(SI (*));
+void displace(SI (*), PARTICLE (*));
 void rotate(void);
