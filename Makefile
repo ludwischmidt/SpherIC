@@ -8,7 +8,7 @@ EXE     = spheric
 
 # Compiler stuff
 
-CC	= gcc
+CC	= h5cc
 CFLAGS	= -O2 -Wall
 LIBS	= -lm
 

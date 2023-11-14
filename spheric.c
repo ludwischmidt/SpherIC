@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
   */
   
   INT i;
-  INT outputgridr,outputgriddf,output_gadget_binary,output_tipsy_binary,output_ifrit,output_profiles;
+  INT outputgridr,outputgriddf,output_gadget_binary,output_gizmo_hdf5,output_tipsy_binary,output_ifrit,output_profiles;
   DOUBLE randomseed;
   DOUBLE t0, t1, t2, t3, t4, t5, t6, t7,t8;
   PARTICLE *bh;
@@ -67,6 +67,7 @@ int main(int argc, char **argv) {
   outputgridr = 0;
   outputgriddf = 0;
   output_gadget_binary = 0;
+  output_gizmo_hdf5 = 0;
   output_tipsy_binary = 0;
   output_ifrit = 0;
   output_profiles = 0;
@@ -278,6 +279,10 @@ int main(int argc, char **argv) {
       output_gadget_binary = 1;
       i++;
     }
+    else if (strcmp(argv[i],"-ogh") == 0) {
+      output_gizmo_hdf5 = 1;
+      i++;
+    }
     else if (strcmp(argv[i],"-otb") == 0) {
       output_tipsy_binary = 1;
       i++;
@@ -481,7 +486,7 @@ int main(int argc, char **argv) {
     fprintf(stderr,"Setting mass to light ratios... \n");	
     set_lighttomass(si);
   }
-  displace(si);	
+  displace(si,bh);
 
   /*
   ** Write Output
@@ -496,6 +501,11 @@ int main(int argc, char **argv) {
     assert(file != NULL);
     write_gadget(file,bh,si);
     fclose(file);
+  }
+
+  if (output_gizmo_hdf5 == 1) {
+    sprintf(FILENAME,"%s-gizmo.hdf5",INPUTNAME);
+    write_gizmo_file(FILENAME,bh,si);
   }
 
   if (output_tipsy_binary == 1) {
