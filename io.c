@@ -11,6 +11,8 @@
 #include <assert.h>
 #include "definitions.h"
 #include "io.h"
+#include <hdf5.h>
+#include <hdf5_hl.h>
 
 
 /*
@@ -291,7 +293,7 @@ void write_profiles(FILE *F, const SI *si,int Ngrid, double rlow, double rup){
 
 void write_gadget(FILE *fp, const PARTICLE *bh, const SI *si){
 
-  int i, j, dummy, Ntotal,Ndark,Nstar;
+  int i, j, dummy, status, Ntotal,Ndark,Nstar;
   float temp;
   PARTICLE *p;
   PARTICLE *pstar;
@@ -352,21 +354,29 @@ void write_gadget(FILE *fp, const PARTICLE *bh, const SI *si){
   /*
   ** Write out header
   */
+  //fprintf(stderr,"Writing gadget header....");
   dummy = sizeof(GH);
-  assert(fwrite(&dummy,sizeof(int),1,fp) == 1);
-  assert(fwrite(&gh,sizeof(GH),1,fp) == 1);
-  assert(fwrite(&dummy,sizeof(int),1,fp) == 1);
+  status = fwrite(&dummy,sizeof(int),1,fp);
+  assert(status == 1);
+  status = fwrite(&gh,sizeof(GH),1,fp);
+  assert(status == 1);
+  status = fwrite(&dummy,sizeof(int),1,fp);
+  assert(status == 1);
+  //fprintf(stderr,"done\n");
   /*
   ** Write out positions
   */
+  //fprintf(stderr,"Writing gadget positions....");
   dummy = 3*Ntotal*sizeof(float);
-  assert(fwrite(&dummy,sizeof(int),1,fp) == 1); 
+  status = fwrite(&dummy,sizeof(int),1,fp);
+  assert(status == 1); 
     
   for(i = 0; i < Ndark; i++) {
     if (p[i].star_flag == 0) {
       for(j = 1; j < 4; j++) {
-	temp = p[i].r[j];
-	assert(fwrite(&temp,sizeof(float),1,fp) == 1);
+        temp = p[i].r[j];
+        status = fwrite(&temp,sizeof(float),1,fp);
+        assert(status == 1);
       }
     }
   }
@@ -384,26 +394,32 @@ void write_gadget(FILE *fp, const PARTICLE *bh, const SI *si){
   for(i = 0; i < Nstar; i++) {
     for(j = 1; j < 4; j++) {
       temp = pstar[i].r[j];
-      assert(fwrite(&temp,sizeof(float),1,fp) == 1);
+      status = fwrite(&temp,sizeof(float),1,fp);
+      assert(status == 1);
     }
 		
   }
   //	}		
+  //fprintf(stderr,"done\n");
 	
-  assert(fwrite(&dummy,sizeof(int),1,fp) == 1);
+  status = fwrite(&dummy,sizeof(int),1,fp);
+  assert(status == 1);
     
   /*
   ** Write out velocities
   */
 	
+  //fprintf(stderr,"Writing gadget velocities....");
   dummy = 3*Ntotal*sizeof(float);
-  assert(fwrite(&dummy,sizeof(int),1,fp) == 1); 
+  status = fwrite(&dummy,sizeof(int),1,fp);
+  assert(status == 1); 
     		
   for(i = 0; i < Ndark; i++) {
     if (p[i].star_flag == 0) {
       for(j = 1; j < 4; j++) {
-	temp = p[i].v[j];
-	assert(fwrite(&temp,sizeof(float),1,fp) == 1);
+        temp = p[i].v[j];
+        status = fwrite(&temp,sizeof(float),1,fp);
+        assert(status == 1);
       }
     }
   }
@@ -421,33 +437,297 @@ void write_gadget(FILE *fp, const PARTICLE *bh, const SI *si){
   for(i = 0; i < Nstar; i++) {
     for(j = 1; j < 4; j++) {
       temp = pstar[i].v[j];
-      assert(fwrite(&temp,sizeof(float),1,fp) == 1);
+      status = fwrite(&temp,sizeof(float),1,fp);
+      assert(status == 1);
     }		
   }
   //	}
 			
-  assert(fwrite(&dummy,sizeof(int),1,fp) == 1);
+  status = fwrite(&dummy,sizeof(int),1,fp);
+  assert(status == 1);
+  //fprintf(stderr,"done\n");
     
   /*
   ** Write out ids
   */
+  //fprintf(stderr,"Writing gadget ids....");
   dummy = Ntotal*sizeof(int);
-  assert(fwrite(&dummy,sizeof(int),1,fp) == 1);
+  status = fwrite(&dummy,sizeof(int),1,fp);
+  assert(status == 1);
     
   for(i = 0; i < Ndark; i++) {
     temp = p[i].index;
-    assert(fwrite(&temp,sizeof(int),1,fp) == 1);
+    status = fwrite(&temp,sizeof(int),1,fp);
+    assert(status == 1);
   }
   for(i = 0; i < Nstar; i++) {
     temp = pstar[i].index;
-    assert(fwrite(&temp,sizeof(int),1,fp) == 1);
+    status = fwrite(&temp,sizeof(int),1,fp);
+    assert(status == 1);
   }
-  assert(fwrite(&dummy,sizeof(int),1,fp) == 1);
+  status = fwrite(&dummy,sizeof(int),1,fp);
+  assert(status == 1);
+  //fprintf(stderr,"done\n");
 
+  //fprintf(stderr,"Finished writing gadget file.\n");
+}
+
+
+/**
+ * Write a GIZMO hdf5 file
+ *
+ * @param fname - Name of hdf5 file
+ * @param bh - center BH data
+ * @param si - system info
+ */
+void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
+
+  int i, j, Ndark,Nstar,Nbh;
+  PARTICLE *p;
+  PARTICLE *pstar;
+  GH gh;
+
+  // Dark and star particle arrays
+  p = si->p;
+  pstar = si->pstar;
+
+  /*
+  **  Assign number of particles.
+  */
+  Nstar = si->Nstar;
+  Ndark = si->N;
+  // We don't need Ntotal, but if I'm understanding correctly, this actually
+  // effectively turns off stars if nostarpot_flag is true. I don't think
+  // that's what we want for gizmo. It'd be better to do that in the config
+  // or parameter files.
+  //Ntotal = (si->nostarpot_flag == 0) ? Nstar + Ndark : Ndark;
+  // The write_gadget function just includes the central BH by incrementing
+  // Ntotal and does nothing else. This is insufficient in general but will
+  // only be fixed here
+  if (bh->mass != 0) {
+    Nbh = 1;
+  } else {
+    Nbh = 0;
+  }
+
+  /*
+  ** Initialise header - we can reuse most of this since GIZMO expects
+  ** backwards compatability.
+  */
+  gh.npart[0] = 0;
+  gh.npart[1] = Ndark;
+  gh.npart[2] = 0;
+  gh.npart[3] = 0;
+  gh.npart[4] = Nstar;
+  gh.npart[5] = Nbh;
+  gh.mass[0] = 0;
+  gh.mass[1] = si->mass;
+  gh.mass[2] = 0;
+  gh.mass[3] = 0;
+  gh.mass[4] = si->massStar;
+  gh.mass[5] = bh->mass;
+  gh.npartTotal[0] = 0;
+  gh.npartTotal[1] = Ndark;
+  gh.npartTotal[2] = 0;
+  gh.npartTotal[3] = 0;
+  gh.npartTotal[4] = Nstar;
+  gh.npartTotal[5] = Nbh;
+  for (i = 0; i < 6; i++) {
+    gh.npartTotalHighWord[i] = 0;
+  }
+  gh.time = 0;
+  gh.num_files = 1;
+  gh.flag_doubleprecision = 0;
+  gh.BoxSize = 0; // This is ignored by gizmo but used by other software
+  // The following are ignored as per gizmo-public/scripts/make_IC.py.
+  // Most of them are set in the params or Config file
+  //gh.redshift = 0;
+  //gh.flag_sfr = 0;
+  //gh.flag_feedback = 0;
+  //gh.flag_cooling = 0;
+  //gh.Omega0 = 0;
+  //gh.OmegaLambda = 0;
+  //gh.HubbleParam = 0;
+  //gh.flag_stellarage = 0;
+  //gh.flag_metals = 0;
+  //gh.flag_entropy_instead_u = 0;
+
+  /* now the various steps involved in preparing an hdf5 file */
+  hid_t file_id, grp;
+  /* create a HDF5 file */
+  file_id = H5Fcreate(fname, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+  // Only need to create groups for PartType1, PartType4, and PartType5
+  herr_t status;
+
+
+  ////////  Do dark particles
+  //fprintf(stderr,"Saving dark particles\nCreating and closing group....");
+  grp = H5Gcreate(file_id, "/PartType1", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+  status = H5Gclose(grp);
+  assert(status >= 0);
+  hsize_t dims[2] = {Ndark, 3};
+  double ddrk[Ndark][3];
+  // Do coordinates
+  for(i=0;i<Ndark;i++){
+    for(j=0;j<3;j++){
+      ddrk[i][j] = p[i].r[j+1];
+    }
+  }
+
+  /* create and write a double type dataset named "/PartType1/Coordinates" */
+  //fprintf(stderr,"created.\nSaving coordinates dataset....");
+  status = H5LTmake_dataset(file_id, "/PartType1/Coordinates", 2, dims,
+                            H5T_NATIVE_DOUBLE, ddrk);
+  assert(status != -1);
+  //fprintf(stderr,"saved.\nSaving velocities dataset....");
+  // do velocities - since velocities are also an Ndark x 3 array, reuse ddrk
+  for(i=0;i<Ndark;i++){
+    for(j=0;j<3;j++){
+      ddrk[i][j] = p[i].v[j+1];
+    }
+  }
+  status = H5LTmake_dataset(file_id, "/PartType1/Velocities", 2, dims,
+                            H5T_NATIVE_DOUBLE, ddrk);
+  assert(status != -1);
+  //fprintf(stderr,"saved.\nSaving particle ids....");
+  // do number id
+  dims[1] = 1; // Now only a Ndark x 1 array
+  double adrk[Ndark];
+  for(i=0;i<Ndark;i++){
+    adrk[i] = p[i].index;
+  }
+  status = H5LTmake_dataset(file_id, "/PartType1/ParticleIDs", 1, dims,
+                            H5T_NATIVE_DOUBLE, adrk);
+  assert(status != -1);
+  //fprintf(stderr,"saved.\nSaving masses....");
+  // do masses - can reuse adrk
+  for(i=0;i<Ndark;i++){
+    adrk[i] = gh.mass[1];
+  }
+  status = H5LTmake_dataset(file_id, "/PartType1/Masses", 1, dims,
+                            H5T_NATIVE_DOUBLE, adrk);
+  assert(status != -1);
+  //fprintf(stderr,"saved.\n");
+
+  /////// Do star particles
+
+  if(Nstar > 0){
+    grp = H5Gcreate(file_id, "/PartType4", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    status = H5Gclose(grp);
+    assert(status >= 0);
+    dims[0] = Nstar;
+    dims[1] = 3;
+    double dstr[Nstar][3];
+    // Do coordinates
+    for(i=0;i<Nstar;i++){
+      for(j=0;j<3;j++){
+        dstr[i][j] = pstar[i].r[j+1];
+      }
+    }
+
+    /* create and write a double type dataset named "/PartType1/Coordinates" */
+    status = H5LTmake_dataset(file_id, "/PartType4/Coordinates", 2, dims,
+                            H5T_NATIVE_DOUBLE, dstr);
+    assert(status != -1);
+    // do velocities - since velocities are also an Nstar x 3 array, reuse ddrk
+    for(i=0;i<Nstar;i++){
+      for(j=0;j<3;j++){
+        dstr[i][j] = pstar[i].v[j+1];
+      }
+    }
+    status = H5LTmake_dataset(file_id, "/PartType4/Velocities", 2, dims,
+                              H5T_NATIVE_DOUBLE, dstr);
+    assert(status != -1);
+    // do number id - needs to start from Ndark
+    dims[1] = 1; // Now only a Nstar x 1 array
+    double astr[Nstar];
+    for(i=0;i<Nstar;i++){
+      astr[i] = pstar[i].index;
+    }
+    status = H5LTmake_dataset(file_id, "/PartType4/ParticleIDs", 1, dims,
+                              H5T_NATIVE_DOUBLE, astr);
+    assert(status != -1);
+    // do masses - can reuse adrk
+    for(i=0;i<Nstar;i++){
+      astr[i] = gh.mass[4];
+    }
+    status = H5LTmake_dataset(file_id, "/PartType4/Masses", 1, dims,
+                              H5T_NATIVE_DOUBLE, astr);
+    assert(status != -1);
+  }
+
+  /////// Do black holes
+  if(Nbh > 0){
+    grp = H5Gcreate(file_id, "/PartType5", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    status = H5Gclose(grp);
+    assert(status >= 0);
+    double dbh[Nbh][3];
+    dims[0] = Nbh;
+    dims[1] = 3;
+    // Do coordinates
+    for(i=0;i<Nbh;i++){
+      for(j=0;j<3;j++){
+        dbh[i][j] = bh->r[j+1];
+      }
+    }
+    /* create and write a double type dataset named "/PartType5/Coordinates" */
+    status = H5LTmake_dataset(file_id, "/PartType5/Coordinates", 2, dims,
+                            H5T_NATIVE_DOUBLE, dbh);
+    assert(status != -1);
+    // do velocities - since velocities are also an Nbh x 3 array, reuse dbh
+    for(i=0;i<Nbh;i++){
+      for(j=0;j<3;j++){
+        dbh[i][j] = bh->v[j];
+      }
+    }
+    status = H5LTmake_dataset(file_id, "/PartType5/Velocities", 2, dims,
+                            H5T_NATIVE_DOUBLE, dbh);
+    assert(status != -1);
+    // do number id - needs to start from Ndark + Nstar
+    dims[1] = 1; // Now only a Nbh x 1 array
+    double abh[Nbh];
+    for(i=0;i<Nbh;i++){
+      abh[i] = i + Ndark + Nstar;
+    }
+    status = H5LTmake_dataset(file_id, "/PartType5/ParticleIDs", 1, dims,
+                            H5T_NATIVE_DOUBLE, abh);
+    assert(status != -1);
+    // do masses - can reuse adrk
+    for(i=0;i<Nbh;i++){
+      abh[i] = bh->mass;
+    }
+    status = H5LTmake_dataset(file_id, "/PartType5/Masses", 1, dims,
+                            H5T_NATIVE_DOUBLE, abh);
+    assert(status != -1);
+  }
+
+  /* add some hdf5 attributes with the metadata we need */
+  grp = H5Gcreate(file_id, "/Header", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+  status = H5Gclose(grp);
+  assert(status >= 0);
+  // here we set all the basic numbers that go into the header
+  // (most of these will be written over anyways if it's an IC file; the only thing we actually *need* to be 'correct' is "npart")
+  H5LTset_attribute_uint(file_id, "/Header", "NumPart_ThisFile", gh.npart, 6);
+  H5LTset_attribute_int(file_id, "/Header", "NumPart_Total", gh.npartTotal, 6);
+  H5LTset_attribute_int(file_id, "/Header", "NumPart_Total_HighWord", gh.npartTotalHighWord, 6); //This should get overwritten I think?
+  // Since we won't assume particles will have constant masses, we will set
+  // this to an array of 0s instead of using gh.mass
+  float massTable[6] = {0,0,0,0,0,0};
+  H5LTset_attribute_float(file_id, "/Header", "MassTable", massTable, 6);
+  H5LTset_attribute_double(file_id, "/Header", "Time", &gh.time, 1);
+  H5LTset_attribute_int(file_id, "/Header", "NumFilesPerSnapshot", &gh.num_files, 1);
+  H5LTset_attribute_int(file_id, "/Header", "Flag_DoublePrecision", &gh.flag_doubleprecision, 1);
+  char *gizver = "2023";
+  H5LTset_attribute_char(file_id, "/Header", "GIZMO_version", gizver, 1);
+  H5LTset_attribute_double(file_id, "/Header", "BoxSize", &gh.BoxSize, 1);
+
+  status = H5Fclose (file_id); assert(status != -1);
+  assert(status != -1);
+  H5close();
 }
 
 /*
-** Routine for writing ACII files with initial conditions.
+** Routine for writing ASCII files with initial conditions.
 */
 
 void write_ics(FILE *F, const SI *si,int flag){
