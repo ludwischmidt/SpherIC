@@ -28,3 +28,4 @@ Thumbs.db
 spheric
 *.bin
 /runs
+*.params-usedvalues

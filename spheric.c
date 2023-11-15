@@ -505,7 +505,7 @@ int main(int argc, char **argv) {
 
   if (output_gizmo_hdf5 == 1) {
     sprintf(FILENAME,"%s-gizmo.hdf5",INPUTNAME);
-    write_gizmo_file(FILENAME,bh,si);
+    write_gizmo(FILENAME,bh,si);
   }
 
   if (output_tipsy_binary == 1) {

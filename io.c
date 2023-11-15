@@ -293,7 +293,7 @@ void write_profiles(FILE *F, const SI *si,int Ngrid, double rlow, double rup){
 
 void write_gadget(FILE *fp, const PARTICLE *bh, const SI *si){
 
-  int i, j, dummy, Ntotal,Ndark,Nstar;
+  int i, j, dummy, status, Ntotal,Ndark,Nstar;
   float temp;
   PARTICLE *p;
   PARTICLE *pstar;
@@ -354,21 +354,29 @@ void write_gadget(FILE *fp, const PARTICLE *bh, const SI *si){
   /*
   ** Write out header
   */
+  //fprintf(stderr,"Writing gadget header....");
   dummy = sizeof(GH);
-  assert(fwrite(&dummy,sizeof(int),1,fp) == 1);
-  assert(fwrite(&gh,sizeof(GH),1,fp) == 1);
-  assert(fwrite(&dummy,sizeof(int),1,fp) == 1);
+  status = fwrite(&dummy,sizeof(int),1,fp);
+  assert(status == 1);
+  status = fwrite(&gh,sizeof(GH),1,fp);
+  assert(status == 1);
+  status = fwrite(&dummy,sizeof(int),1,fp);
+  assert(status == 1);
+  //fprintf(stderr,"done\n");
   /*
   ** Write out positions
   */
+  //fprintf(stderr,"Writing gadget positions....");
   dummy = 3*Ntotal*sizeof(float);
-  assert(fwrite(&dummy,sizeof(int),1,fp) == 1); 
+  status = fwrite(&dummy,sizeof(int),1,fp);
+  assert(status == 1); 
     
   for(i = 0; i < Ndark; i++) {
     if (p[i].star_flag == 0) {
       for(j = 1; j < 4; j++) {
-	temp = p[i].r[j];
-	assert(fwrite(&temp,sizeof(float),1,fp) == 1);
+        temp = p[i].r[j];
+        status = fwrite(&temp,sizeof(float),1,fp);
+        assert(status == 1);
       }
     }
   }
@@ -386,26 +394,32 @@ void write_gadget(FILE *fp, const PARTICLE *bh, const SI *si){
   for(i = 0; i < Nstar; i++) {
     for(j = 1; j < 4; j++) {
       temp = pstar[i].r[j];
-      assert(fwrite(&temp,sizeof(float),1,fp) == 1);
+      status = fwrite(&temp,sizeof(float),1,fp);
+      assert(status == 1);
     }
 		
   }
   //	}		
+  //fprintf(stderr,"done\n");
 	
-  assert(fwrite(&dummy,sizeof(int),1,fp) == 1);
+  status = fwrite(&dummy,sizeof(int),1,fp);
+  assert(status == 1);
     
   /*
   ** Write out velocities
   */
 	
+  //fprintf(stderr,"Writing gadget velocities....");
   dummy = 3*Ntotal*sizeof(float);
-  assert(fwrite(&dummy,sizeof(int),1,fp) == 1); 
+  status = fwrite(&dummy,sizeof(int),1,fp);
+  assert(status == 1); 
     		
   for(i = 0; i < Ndark; i++) {
     if (p[i].star_flag == 0) {
       for(j = 1; j < 4; j++) {
-	temp = p[i].v[j];
-	assert(fwrite(&temp,sizeof(float),1,fp) == 1);
+        temp = p[i].v[j];
+        status = fwrite(&temp,sizeof(float),1,fp);
+        assert(status == 1);
       }
     }
   }
@@ -423,29 +437,39 @@ void write_gadget(FILE *fp, const PARTICLE *bh, const SI *si){
   for(i = 0; i < Nstar; i++) {
     for(j = 1; j < 4; j++) {
       temp = pstar[i].v[j];
-      assert(fwrite(&temp,sizeof(float),1,fp) == 1);
+      status = fwrite(&temp,sizeof(float),1,fp);
+      assert(status == 1);
     }		
   }
   //	}
 			
-  assert(fwrite(&dummy,sizeof(int),1,fp) == 1);
+  status = fwrite(&dummy,sizeof(int),1,fp);
+  assert(status == 1);
+  //fprintf(stderr,"done\n");
     
   /*
   ** Write out ids
   */
+  //fprintf(stderr,"Writing gadget ids....");
   dummy = Ntotal*sizeof(int);
-  assert(fwrite(&dummy,sizeof(int),1,fp) == 1);
+  status = fwrite(&dummy,sizeof(int),1,fp);
+  assert(status == 1);
     
   for(i = 0; i < Ndark; i++) {
     temp = p[i].index;
-    assert(fwrite(&temp,sizeof(int),1,fp) == 1);
+    status = fwrite(&temp,sizeof(int),1,fp);
+    assert(status == 1);
   }
   for(i = 0; i < Nstar; i++) {
     temp = pstar[i].index;
-    assert(fwrite(&temp,sizeof(int),1,fp) == 1);
+    status = fwrite(&temp,sizeof(int),1,fp);
+    assert(status == 1);
   }
-  assert(fwrite(&dummy,sizeof(int),1,fp) == 1);
+  status = fwrite(&dummy,sizeof(int),1,fp);
+  assert(status == 1);
+  //fprintf(stderr,"done\n");
 
+  //fprintf(stderr,"Finished writing gadget file.\n");
 }
 
 
@@ -456,7 +480,7 @@ void write_gadget(FILE *fp, const PARTICLE *bh, const SI *si){
  * @param bh - center BH data
  * @param si - system info
  */
-void write_gizmo_file(char *fname, const PARTICLE *bh, const SI *si){
+void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
 
   int i, j, Ndark,Nstar,Nbh;
   PARTICLE *p;
@@ -537,11 +561,10 @@ void write_gizmo_file(char *fname, const PARTICLE *bh, const SI *si){
 
 
   ////////  Do dark particles
-  fprintf(stderr,"Saving dark particles\nCreating and closing group....");
+  //fprintf(stderr,"Saving dark particles\nCreating and closing group....");
   grp = H5Gcreate(file_id, "/PartType1", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
   status = H5Gclose(grp);
-  if(status < 0)
-    fprintf(stderr,"Problem closing PartType1 group!\n");
+  assert(status >= 0);
   hsize_t dims[2] = {Ndark, 3};
   double ddrk[Ndark][3];
   // Do coordinates
@@ -552,11 +575,11 @@ void write_gizmo_file(char *fname, const PARTICLE *bh, const SI *si){
   }
 
   /* create and write a double type dataset named "/PartType1/Coordinates" */
-  fprintf(stderr,"created.\nSaving coordinates dataset....");
+  //fprintf(stderr,"created.\nSaving coordinates dataset....");
   status = H5LTmake_dataset(file_id, "/PartType1/Coordinates", 2, dims,
                             H5T_NATIVE_DOUBLE, ddrk);
   assert(status != -1);
-  fprintf(stderr,"saved.\nSaving velocities dataset....");
+  //fprintf(stderr,"saved.\nSaving velocities dataset....");
   // do velocities - since velocities are also an Ndark x 3 array, reuse ddrk
   for(i=0;i<Ndark;i++){
     for(j=0;j<3;j++){
@@ -566,17 +589,17 @@ void write_gizmo_file(char *fname, const PARTICLE *bh, const SI *si){
   status = H5LTmake_dataset(file_id, "/PartType1/Velocities", 2, dims,
                             H5T_NATIVE_DOUBLE, ddrk);
   assert(status != -1);
-  fprintf(stderr,"saved.\nSaving particle ids....");
+  //fprintf(stderr,"saved.\nSaving particle ids....");
   // do number id
   dims[1] = 1; // Now only a Ndark x 1 array
   double adrk[Ndark];
   for(i=0;i<Ndark;i++){
-    adrk[i] = i;
+    adrk[i] = p[i].index;
   }
   status = H5LTmake_dataset(file_id, "/PartType1/ParticleIDs", 1, dims,
                             H5T_NATIVE_DOUBLE, adrk);
   assert(status != -1);
-  fprintf(stderr,"saved.\nSaving masses....");
+  //fprintf(stderr,"saved.\nSaving masses....");
   // do masses - can reuse adrk
   for(i=0;i<Ndark;i++){
     adrk[i] = gh.mass[1];
@@ -584,15 +607,14 @@ void write_gizmo_file(char *fname, const PARTICLE *bh, const SI *si){
   status = H5LTmake_dataset(file_id, "/PartType1/Masses", 1, dims,
                             H5T_NATIVE_DOUBLE, adrk);
   assert(status != -1);
-  fprintf(stderr,"saved.\n");
+  //fprintf(stderr,"saved.\n");
 
   /////// Do star particles
 
   if(Nstar > 0){
     grp = H5Gcreate(file_id, "/PartType4", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     status = H5Gclose(grp);
-    if(status < 0)
-      fprintf(stderr,"Problem closing PartType4 group!\n");
+    assert(status >= 0);
     dims[0] = Nstar;
     dims[1] = 3;
     double dstr[Nstar][3];
@@ -610,7 +632,7 @@ void write_gizmo_file(char *fname, const PARTICLE *bh, const SI *si){
     // do velocities - since velocities are also an Nstar x 3 array, reuse ddrk
     for(i=0;i<Nstar;i++){
       for(j=0;j<3;j++){
-        dstr[i][j] = p[i].v[j+1];
+        dstr[i][j] = pstar[i].v[j+1];
       }
     }
     status = H5LTmake_dataset(file_id, "/PartType4/Velocities", 2, dims,
@@ -620,7 +642,7 @@ void write_gizmo_file(char *fname, const PARTICLE *bh, const SI *si){
     dims[1] = 1; // Now only a Nstar x 1 array
     double astr[Nstar];
     for(i=0;i<Nstar;i++){
-      astr[i] = i + Ndark;
+      astr[i] = pstar[i].index;
     }
     status = H5LTmake_dataset(file_id, "/PartType4/ParticleIDs", 1, dims,
                               H5T_NATIVE_DOUBLE, astr);
@@ -638,8 +660,7 @@ void write_gizmo_file(char *fname, const PARTICLE *bh, const SI *si){
   if(Nbh > 0){
     grp = H5Gcreate(file_id, "/PartType5", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     status = H5Gclose(grp);
-    if(status < 0)
-      fprintf(stderr,"Problem closing PartType5 group!\n");
+    assert(status >= 0);
     double dbh[Nbh][3];
     dims[0] = Nbh;
     dims[1] = 3;
@@ -683,8 +704,7 @@ void write_gizmo_file(char *fname, const PARTICLE *bh, const SI *si){
   /* add some hdf5 attributes with the metadata we need */
   grp = H5Gcreate(file_id, "/Header", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
   status = H5Gclose(grp);
-  if(status < 0)
-    fprintf(stderr,"Problem closing Header group!\n");
+  assert(status >= 0);
   // here we set all the basic numbers that go into the header
   // (most of these will be written over anyways if it's an IC file; the only thing we actually *need* to be 'correct' is "npart")
   H5LTset_attribute_uint(file_id, "/Header", "NumPart_ThisFile", gh.npart, 6);

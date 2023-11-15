@@ -24,7 +24,7 @@
 # # SpherIC documentation
 
 # %% [markdown]
-# So far, the only documentation for SpherIC beyond the [original paper](https://arxiv.org/abs/1301.3137) appears to be in-code comments and the CLI help menu (Note the nonstandard `-help` and `-version` options are not mentioned). These have been duplicated here:
+# Here is the CLI help menu (Note the nonstandard `-help` and `-version` options are not mentioned):
 #
 # ```
 # -halo               : generate a dark matter halo
@@ -61,6 +61,8 @@
 # ```
 #
 # From running and code analysis, I think the `rs` parameter actually defaults to `-1` aka no default.
+#
+# Note: SpherIC assumes units of $10^{10}$ M$_{\odot}$, kpc, and km/s. 
 
 # %% [markdown]
 # # Imports
@@ -133,6 +135,8 @@ class SphericOptions:
         optStr = ""
         for a in attributes:
             match a:
+                case (_,None):
+                    pass
                 case (_,bool()):
                     if a[1]:
                         optStr = optStr + f"-{a[0]} "
@@ -142,8 +146,8 @@ class SphericOptions:
                     optStr = optStr + f"-b {a[1]} "
                 case ("c"|"gamma",x):
                     optStr = optStr + f"-c {a[1]} "
-                case ("Mhalo",1):
-                    pass
+                #case ("Mhalo",1):
+                #    pass
                 case ("randomseed", -1):
                     pass
                 case (("MBH"|"Nstar"|"Mstar"|"dx"|"dy"|"dz"|"dvx"|"dvy"|"dvz"),0): # Deal with default 0 values
@@ -190,10 +194,12 @@ def spheric(opts=None):
 # ## Generate test file
 
 # %%
-so = SphericOptions(MBH=10,dx=-5,ogb=True,Nhalo=1e4,ogh=True)
+so = SphericOptions(MBH=1e-2*0,dx=-5,dvx=1,ogb=True,Nhalo=1e4,ogh=True)
 print(f"Using spheric options: {so.generateOptionString()}")
 comproc = spheric(so)
+print(comproc.stdout.decode())
 print(comproc.stderr.decode())
+#./spheric -ogb -ogr -opfs -halo -Nhalo 500000 -Mhalo 0.15 -a 1 -b 3 -c 1 -rs 1.18 -rcutoff 118.0 -name p5e5_m1e9_vmax24_rc100rs
 
 # %% [markdown]
 # ## Load in IC file using yt
@@ -261,6 +267,82 @@ fig.subplots_adjust(wspace=0.4)
 print(ad.quantities.center_of_mass(use_gas=False,use_particles=True))
 print(ad.quantities.center_of_mass(use_gas=False,use_particles=True,particle_type="PartType1"))
 ad["PartType5","Coordinates"]
+
+# %% [markdown]
+# ## Load in Snapshot 000 from Gizmo
+
+# %%
+import yt
+
+ds = yt.load("../../gizmo-public/output/spheric_test_gizmo/snapshot_000.hdf5",bounding_box=[[-300,300]]*3)
+
+plot = yt.ParticleProjectionPlot(ds,"z",("PartType1","Masses"),window_size=(4,4))
+try:
+    plot.annotate_particles(20,ptype="PartType5",col="orange",p_size=25)
+except:
+    pass
+plot.show()
+
+# %%
+import yt
+
+ds = yt.load("../../gizmo-public/output/spheric_test_gadget/snapshot_000.hdf5",bounding_box=[[-300,300]]*3)
+
+plot = yt.ParticleProjectionPlot(ds,"z",("PartType1","Masses"),window_size=(4,4))
+#plot.annotate_particles(20,ptype="PartType5",col="orange",p_size=25)
+plot.show()
+
+# %%
+import yt
+
+ds_giz = yt.load("../../gizmo-public/output/spheric_test_gizmo/snapshot_000.hdf5",bounding_box=[[-300,300]]*3)
+ds_gad = yt.load("../../gizmo-public/output/spheric_test_gadget/snapshot_000.hdf5",bounding_box=[[-300,300]]*3)
+
+ad_giz = ds_giz.all_data()
+ad_gad = ds_gad.all_data()
+
+print(min(ad_giz["PartType1","ParticleIDs"]))
+print(min(ad_gad["PartType1","ParticleIDs"]))
+
+# %%
+# Note for some reason the gadget particle ids are like logarithmically distributed. I have no idea why
+print(ad_giz["PartType1","ParticleIDs"][0:4])
+print(ad_gad["PartType1","ParticleIDs"][0:4]-1065353216)
+gizpid = ad_giz["PartType1","ParticleIDs"]
+gadpid = ad_gad["PartType1","ParticleIDs"]
+giz1 = np.argwhere(gizpid==min(gizpid))[0][0]
+gad1 = np.argwhere(gadpid==min(gadpid))[0][0]
+print(f"{giz1=} {gad1=}")
+gizpx = ad_giz['PartType1','particle_position_x']
+gadpx = ad_gad['PartType1','particle_position_x']
+print(f"{gizpx[giz1]} {gadpx[gad1]}")
+gizvx = ad_giz['PartType1','particle_velocity_x']
+gadvx = ad_gad['PartType1','particle_velocity_x']
+gizc = ad_giz['PartType1','Coordinates']
+gadc = ad_gad['PartType1','Coordinates']
+gizv = ad_giz['PartType1','Velocities']
+gadv = ad_gad['PartType1','Velocities']
+print(f"{gizvx[giz1]} {gadvx[gad1]}")
+
+idxgiz = np.argsort(gizpid)
+idxgad = np.argsort(gadpid)
+
+def dispvecmag(v1,v2,s=1):
+    dv = [v1[i]-s*v2[i] for i,_ in enumerate(v1)]
+    dvm = [v*v for v in dv]
+    return sum(dvm)
+
+posdiff = np.any(np.abs(gizpx[idxgiz]-gadpx[idxgad])>0)
+veldiff = np.any(np.abs(gizvx[idxgiz]-gadvx[idxgad])>0)
+print(f"Any x-position differences: {posdiff}")
+print(f"Any velocity differences: {veldiff}")
+
+if posdiff:
+    plt.plot(gizpx[idxgiz]-gadpx[idxgad],'.')
+if veldiff:
+    dvm = [dispvecmag(gizv[idxgiz[i]],gadv[idxgad[i]]) for i,_ in enumerate(idxgiz)]
+    plt.plot(dvm,'.')
+
 
 # %%
 
