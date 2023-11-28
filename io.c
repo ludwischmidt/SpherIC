@@ -696,7 +696,7 @@ void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
     // do velocities - since velocities are also an Nbh x 3 array, reuse dbh
     for(i=0;i<Nbh;i++){
       for(j=0;j<3;j++){
-        dbh[i][j] = bh->v[j];
+        dbh[i][j] = bh->v[j+1];
       }
     }
     status = H5LTmake_dataset(file_id, "/PartType5/Velocities", 2, dims,
