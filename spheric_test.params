@@ -12,8 +12,17 @@
 %----  Relevant files (filenames and directories)
 %InitCondFile                ../projects/spheric/runs/IC-gadget.bin   % IC file
 %OutputDir                   output/spheric_test_gadget     % name (full path or sub-folder name) for outputs
-InitCondFile                ../projects/spheric/runs/IC-gizmo   % IC file
-OutputDir                   output/spheric_test_gizmo     % name (full path or sub-folder name) for outputs
+%InitCondFile                ../projects/spheric/runs/IC-gizmo   % IC file
+%OutputDir                   output/spheric_test_gizmo     % name (full path or sub-folder name) for outputs
+%InitCondFile                ../projects/spheric/runs/IC-testmove-gizmo   % IC file
+%OutputDir                   output/testmove     % name (full path or sub-folder name) for outputs
+%InitCondFile                ../projects/spheric/runs/IC-randomNFW-gizmo   % IC file
+%OutputDir                   output/randomNFW     % name (full path or sub-folder name) for outputs
+%InitCondFile                ../projects/spheric/runs/IC-random130-gizmo   % IC file
+%OutputDir                   output/random130     % name (full path or sub-folder name) for outputs
+InitCondFile                ../projects/spheric/runs/IC-combined   % IC file
+OutputDir                   output/combined     % name (full path or sub-folder name) for outputs
+
 
 %---- File formats (input and output)
 ICFormat                    3   % format of IC file: 1=unformatted (gadget) binary, 3=hdf5, 4=cluster
@@ -30,7 +39,8 @@ NumFilesWrittenInParallel   1   % must be < N_processors & power of 2 [Default=1
 %---- Output frequency
 % Use this if Comoving off
 TimeOfFirstSnapshot         0.0   % time (code units) of first snapshot
-TimeBetSnapshot             0.05   % time between snapshot writes (if OutputListOn=0), code units
+TimeBetSnapshot             0.005   % time between snapshot writes (if OutputListOn=0), code units
+TimeBetSnapshot             0.01   % time between snapshot writes (if OutputListOn=0), code units
 % If Comoving on
 %TimeOfFirstSnapshot          0.00990099 % time (expansion factor) of first snapshot
 %ScaleFac_Between_Snapshots         1.0005
@@ -43,7 +53,9 @@ CpuTimeBetRestartFile       7200  	% wall-clock time between restartfile writes,
 %---- Desired simulation beginning and end times (in code units) for run
 % Use these if Comoving off
 TimeBegin                   0.0     % Code-unit time at the beginning of the simulation
-TimeMax                     0.1709     % Code-unit time at the end of the simulation (run will stop)
+%TimeMax                     0.1709     % Code-unit time at the end of the simulation (run will stop)
+%TimeMax                     1.709
+TimeMax                      5
 % Use these if Comoving on
 %TimeBegin                    0.00990099 % Expansion factor at beginning of simulation
 %TimeMax                      1       % Expansion factor at end of simulation
