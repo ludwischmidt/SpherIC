@@ -10,6 +10,18 @@ EXE     = spheric
 
 CC	= h5cc
 CFLAGS	= -O2 -Wall
+LIBS    =
+BRIDGES2 = $(uname -a | grep -o bridges2)
+ifneq (BRIDGES2,)
+# note bridges2 currently requires the following modules to be loaded:
+# gcc/10.2.0  
+# openmpi/4.0.5-gcc10.2.0
+# phdf5/1.10.7-openmpi4.0.5-gcc10.2.0
+# Other combinations may work but are not guaranteed
+CC      = mpicc
+LIBS    = -L$(LIBRARY_PATH) -I$(INCLUDE)
+endif
+
 LIBS	= -lm
 
 # Object definition
