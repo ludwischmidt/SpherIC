@@ -633,12 +633,12 @@ void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
     }
 
     fprintf(stderr,"created.\nSaving coordinates dataset....");
-    /* create and write a double type dataset named "/PartType1/Coordinates" */
+    /* create and write a double type dataset named "/PartType4/Coordinates" */
     status = H5LTmake_dataset(file_id, "/PartType4/Coordinates", 2, dims,
                             H5T_NATIVE_DOUBLE, dstr);
     assert(status != -1);
     fprintf(stderr,"saved.\nSaving velocities dataset....");
-    // do velocities - since velocities are also an Nstar x 3 array, reuse ddrk
+    // do velocities - since velocities are also an Nstar x 3 array, reuse dstr
     for(i=0;i<Nstar;i++){
       for(j=0;j<3;j++){
         dstr[i*3 + j] = pstar[i].v[j+1];
@@ -703,11 +703,11 @@ void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
                             H5T_NATIVE_DOUBLE, dbh);
     assert(status != -1);
     fprintf(stderr,"saved.\nSaving particle ids....");
-    // do number id - needs to start from Ndark + Nstar
+    // do number id - needs to start from Ndark + Nstar + 1
     dims[1] = 1; // Now only a Nbh x 1 array
     double abh[Nbh];
     for(i=0;i<Nbh;i++){
-      abh[i] = i + Ndark + Nstar;
+      abh[i] = i + Ndark + Nstar + 1;
     }
     status = H5LTmake_dataset(file_id, "/PartType5/ParticleIDs", 1, dims,
                             H5T_NATIVE_DOUBLE, abh);
