@@ -8,11 +8,11 @@ EXE     = spheric
 
 # Compiler stuff
 
-CC	= h5cc
-CFLAGS	= -O2 -Wall
-LIBS    =
-BRIDGES2 = $(uname -a | grep -o bridges2)
-ifneq (BRIDGES2,)
+CC     = h5cc
+CFLAGS = -O2 -Wall
+LIBS     =
+BRIDGES2 = $(strip $(shell uname -a | grep -o bridges2))
+ifneq ($(BRIDGES2),)
 # note bridges2 currently requires the following modules to be loaded:
 # gcc/10.2.0  
 # openmpi/4.0.5-gcc10.2.0
@@ -22,7 +22,7 @@ CC      = mpicc
 LIBS    = -L$(LIBRARY_PATH) -I$(INCLUDE)
 endif
 
-LIBS	= -lm
+LIBS    += -lm
 
 # Object definition
 
@@ -33,6 +33,7 @@ OBJ	= $(EXE).o functions.o routines.o io.o
 $(EXE):	$(OBJ) Makefile
 	$(CC) $(CFLAGS) $(OBJ) -o $(EXE) $(LIBS)
 
+.PHONY: clean
 clean:
 	-rm -f *.o *~ $(EXE)
 
