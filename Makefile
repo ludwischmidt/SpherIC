@@ -20,6 +20,7 @@ ifneq ($(BRIDGES2),)
 # Other combinations may work but are not guaranteed
 CC      = mpicc
 LIBS    = -L$(LIBRARY_PATH) -I$(INCLUDE)
+LIBS    += -lhdf5 -lhdf5_hl -lz
 endif
 
 LIBS    += -lm
