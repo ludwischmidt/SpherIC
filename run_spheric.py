@@ -1955,7 +1955,7 @@ fig = plot_merging_bhs(x,y,t,#zo=z,
                        ixl=[-.4,.4],iyl=[-.4,.4])
 fig.gca().set_title('BH movement (CoM frame)')
 
-# %%
+# %% jupyter={"source_hidden": true, "outputs_hidden": true}
 from functools import partial
 
 def animate_merger(xo,yo,t,*,num_points=50,step=5,offset=0):
@@ -2103,7 +2103,7 @@ ax.plot(t,dEdt)
 # %% [markdown]
 # Since $W_{gw} = \frac{32}{5} G \mu^2 \omega^6 r^4$, $\frac{dE}{d\omega}=\frac{W_{gw}}{\dot{\omega}}$ and we now have $r$, $\omega$, and $\dot{\omega}$, we can calculate $\frac{dE}{d\omega}$ directly. But then $h^2(\omega)\sim \frac{16\pi G}{c^2 \omega} \frac{dE}{d\omega}$
 
-# %%
+# %% jupyter={"source_hidden": true, "outputs_hidden": true}
 from unyt import gravitational_constant as G
 from unyt import speed_of_light as c
 
