@@ -171,11 +171,13 @@ typedef struct systeminfo {
   INT king_flag;
   INT plummer_flag;
   INT hernquist_flag;
+  INT starabg_flag;
   INT stars_flag;
   INT nostarpot_flag;
   INT dorvirexact;
   //Structure
   SP *sp;
+  SP *starsp;
   PARTICLE *p;
   PARTICLE *pstar;
   GRIDDF *griddf;

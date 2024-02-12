@@ -41,6 +41,25 @@ void initialise_parameters(SI *si) {
   si->sp->rp = -1;
   si->sp->rhern = -1;	
   si->sp->rhalfStar = -1;
+  // Only used if starabg_flag is true
+  si->starsp->alpha = -1;
+  si->starsp->beta = -1;
+  si->starsp->gamma = -1;
+  si->starsp->delta = -1;
+  si->starsp->rs = -1;
+  si->starsp->rhalf = -1;
+  si->starsp->rcutoff = -1;
+  si->starsp->rho0 = -1;
+  si->starsp->rvir = -1;
+  si->starsp->rdecay = -1;
+  // Note that the following are probably not used
+  si->starsp->M = -1;
+  si->starsp->Mstar = -1;
+  si->starsp->rt = -1;
+  si->starsp->rc = -1;
+  si->starsp->rp = -1;
+  si->starsp->rhern = -1;	
+  si->starsp->rhalfStar = -1;
   si->N0 = 0;
   si->Nstar = 0;
   si->rimp = SBI;
@@ -135,7 +154,7 @@ void check_main_parameters(SI *si) {
 	fprintf(stderr,"You want to include the stellar potential in the calculation, hence you have to set the number of star particles (-Nstar) your self .\n");
 	usage();
       }
-      if (((si->king_flag == 1 ) && (si->plummer_flag == 1)) || ((si->king_flag == 1 ) && (si->hernquist_flag == 1)) || ((si->plummer_flag == 1 ) && (si->hernquist_flag == 1))) {		
+      if (((si->king_flag == 1 ) && (si->plummer_flag == 1)) || ((si->king_flag == 1 ) && (si->hernquist_flag == 1)) || ((si->plummer_flag == 1 ) && (si->hernquist_flag == 1)) || (si->starabg_flag ==1 && ((si->plummer_flag == 1) || (si->king_flag == 1) || (si->hernquist_flag == 1)))) {		
 	fprintf(stderr,"Missing or bad parameter:\n");
 	fprintf(stderr,"You can only use one of the stellar profile options (-king, -plummer, or -hernquist)\n");
 	usage();
@@ -166,6 +185,30 @@ void check_main_parameters(SI *si) {
 	  fprintf(stderr,"You have not set a value for the scale radius defining the Hernquist model (-rp)\n");
 	  usage();
 	}
+      }
+      if(si->starabg_flag == 1){
+        if (si->starsp->alpha == -1) {
+          fprintf(stderr,"Missing or bad parameter:\n");
+          fprintf(stderr,"You have not set a value for the star profile alpha.\n");
+          usage();
+        }
+        if (si->starsp->beta == -1) {
+          fprintf(stderr,"Missing or bad parameter:\n");
+          fprintf(stderr,"You have not set a value for the star profile beta.\n");
+          usage();
+        }
+        if (si->starsp->gamma == -1) {
+          fprintf(stderr,"Missing or bad parameter:\n");
+          fprintf(stderr,"You have not set a value for the star profile gamma.\n");
+          usage();
+        }
+        if (si->starsp->gamma >= 3) {
+          fprintf(stderr,"Missing or bad parameter:\n");
+          fprintf(stderr,"You have chosen stellar gamma = "OFD1".\n",si->starsp->gamma);
+          fprintf(stderr,"This means your cumulative mass function is diverging at the center.\n");
+          fprintf(stderr,"Use a smaller value for gamma.\n");
+          usage();
+        }
       }
     }
 		
@@ -274,9 +317,55 @@ void calculate_parameters(SI *si) {
       //		while (rhoStar(si->sp->rhern,si)/rhoStar(si->routerStar,si) < FACTORROUTERSTAR) {
       //		si->routerStar = si->routerStar*1.1;
       //		}
+    } else if (si->starabg_flag == 1){
+      // Need to copy this over
+      si->starsp->M = si->sp->Mstar;
+      si->starsp->Mstar = si->sp->Mstar;
+      if (si->starsp->beta > 3) {
+        /*
+        ** Finite mass models
+        */
+        if (si->starsp->rs == -1) {
+          fprintf(stderr,"Missing or bad parameter:\n");
+          fprintf(stderr,"For finite mass models you have to set a value for the scale radius rs.\n");
+          usage();
+        }
+        if (si->starsp->rcutoff != -1) {
+          fprintf(stderr,"Warning: ");
+          fprintf(stderr,"For finite mass models the cutoff radius rcutoff is not needed!\n");
+          fprintf(stderr,"Hence, your input for the cutoff radius rcutoff (= "OFD1" LU) was ignored.\n",si->starsp->rcutoff);
+        }
+        si->starsp->rdecay = 0;
+        si->starsp->delta = 0;
+        // TODO: I think M --> Mstar in the following line, but not sure yet
+        // Actually since we set starsp->M  = sp->Mstar, it might be correct
+        IM = exp(lgamma((si->starsp->beta-3)/si->starsp->alpha));
+        IM *= exp(lgamma((3-si->starsp->gamma)/si->starsp->alpha));
+        IM /= (si->starsp->alpha*exp(lgamma((si->starsp->beta-si->starsp->gamma)/si->starsp->alpha)));
+        si->starsp->rho0 = si->starsp->M/(4*M_PI*(si->starsp->rs*si->starsp->rs*si->starsp->rs)*IM);
+        si->starsp->rcutoff = SBI;
+      } else {
+        /*
+        ** Cutoff models
+        */
+        if ((si->starsp->rs == -1) || (si->starsp->rcutoff == -1)) {
+          fprintf(stderr,"Missing or bad parameter:\n");
+          fprintf(stderr,"Specify values for the scale radius -rs and cutoff radius -rcutoff for models with cutoff.\n");
+          usage();
+        }
+        si->starsp->rdecay = CutoffFac*si->starsp->rcutoff;
+        si->starsp->delta = si->starsp->rcutoff/si->starsp->rdecay + dlrhodlr(si->starsp->rcutoff,si);
+        IM = pow(1e-6,3-si->starsp->gamma)/(3-si->starsp->gamma); /* approximate inner integral */
+        IM += integral(integrandIM,1e-6,si->starsp->rcutoff/si->starsp->rs,si);
+        IMcutoff = 1/tau(si->starsp->rcutoff,si);
+        IMcutoff *= 1/(si->starsp->rs*si->starsp->rs*si->starsp->rs);
+        IMcutoff *= integral(integrandIMcutoff,si->starsp->rcutoff,si->starsp->rcutoff+2000*si->starsp->rdecay,si);
+        IM += IMcutoff;
+        si->starsp->rho0 = si->starsp->M/(4*M_PI*(si->starsp->rs*si->starsp->rs*si->starsp->rs)*IM);
+      }
     }
     if (si-> halo_flag == 0) si->router = si->routerStar;
-	
+  	
     IMStar = MencInnerStar(1e-6,si);
     IMStar += integral(integrandMencStar,1e-6,si->routerStar,si);
     si->sp->K = si->sp->Mstar/IMStar;
@@ -284,7 +373,7 @@ void calculate_parameters(SI *si) {
     fprintf(stderr,"Nstar     = "OFI1"\n",si->Nstar);
     fprintf(stderr,"starPmass = "OFD3" MU\n",si->sp->Mstar/si->Nstar);
     fprintf(stderr,"Mstar     = "OFD3" MU\n",si->sp->Mstar);	
-    fprintf(stderr,"K         = "OFD3" MU LU^-3  ->  Normaliztion constant for the stellar model. \n",si->sp->K);
+    fprintf(stderr,"K         = "OFD3" MU LU^-3  ->  Normalization constant for the stellar model. \n",si->sp->K);
     if (si->king_flag == 1) {
       fprintf(stderr,"rt        = "OFD3" LU\n",si->sp->rt);
       fprintf(stderr,"rc        = "OFD3" LU\n\n",si->sp->rc);
@@ -294,6 +383,13 @@ void calculate_parameters(SI *si) {
     }
     if (si->hernquist_flag == 1) {
       fprintf(stderr,"rhern     = "OFD3" LU\n\n",si->sp->rhern);
+    }
+    if (si->starabg_flag ==1) {
+      fprintf(stderr,"alpha_star= "OFD3"\n",si->starsp->alpha);
+      fprintf(stderr,"beta_star = "OFD3"\n",si->starsp->beta);
+      fprintf(stderr,"gamma_star= "OFD3"\n",si->starsp->gamma);
+      fprintf(stderr,"rs_star   = "OFD3" LU\n",si->starsp->rs);
+      fprintf(stderr,"rcut_star = "OFD3" LU\n\n",si->starsp->rcutoff);
     }
   }
 	
@@ -1284,12 +1380,18 @@ void usage() {
   fprintf(stderr,"-king               : generate a stellar component with a King profile\n");
   fprintf(stderr,"-hernquist          : generate a stellar component with a Hernquist profile\n");
   fprintf(stderr,"-plummer            : generate a stellar component with a Plummer profile\n");
+  fprintf(stderr,"-starabg            : generate a 'stellar' component with a (alpha,beta,gamma) profile\n");
   fprintf(stderr,"-Nstar <value>      : number of star particles\n");
   fprintf(stderr,"-Mstar <value>      : total stellar mass \n");
   fprintf(stderr,"-rc <value>         : king core radius\n");
   fprintf(stderr,"-rt <value>         : king tidal radius\n");
   fprintf(stderr,"-rhern <value>      : scale radius for Hernquist profile\n");
   fprintf(stderr,"-rp <value>         : scale radius for Plummer profile\n");
+  fprintf(stderr,"-as <value>         : alpha parameter in the 'star' abg profile\n");
+  fprintf(stderr,"-bs <value>         : beta parameter in the 'star' abg profile\n");
+  fprintf(stderr,"-cs <value>         : gamma parameter in the 'star' abg profile\n");
+  fprintf(stderr,"-rss <value>        : scale radius in the 'star' abg profile (default rss = 1)\n");
+  fprintf(stderr,"-rcuts <value>      : cutoff radius for cutoff 'star' abg models (i.e. beta >= 3)\n");
   fprintf(stderr,"-MBH <value>        : mass of black hole (default MBH = 0)\n");
   fprintf(stderr,"-name <value>       : name of the output file\n");
   fprintf(stderr,"-dx/dy/dz <value>   : position offset for the initial conditions (default All = 0)\n");
@@ -1304,6 +1406,7 @@ void usage() {
   fprintf(stderr,"-nostarpot          : set this flag for excluding the stellar potential \n");
   fprintf(stderr,"-randomseed <value> : set this flag for setting a value for a random seed (default: random value)\n");
   fprintf(stderr,"-dorvirexact        : set this flag for calculating rvir exactly via N^2 sum - Warning: time consuming for large N!\n");
+  fprintf(stderr,"\nNote: The -starabg flag is only intended for use with GIZMO initial conditions (-ogh). Usage elsewhere is not tested.\n");
   fprintf(stderr,"\n");
   exit(1);
 }

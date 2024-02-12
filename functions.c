@@ -1019,6 +1019,156 @@ DOUBLE d2rhoHernquistdr2(DOUBLE r, const SI *si){
 }
 
 /*
+** Using an (alpha,beta,gamma) profile for the "stellar" component. Generally 
+** intended for simulating a two-component system as a high ("stellar") and low
+** ("dm") resolution, i.e. stacked (alpha,beta,gamma) profiles with differing
+** numbers of particles
+**
+** Note that these functions are copied directly from the DM stuff above, the
+** only change is switching from si->sp to si->starsp and renaming
+*/
+/* 
+** alpha-beta-gamma density function with exponential cutoff 
+** except for finite mass models 
+*/
+
+DOUBLE rhoABG(DOUBLE r, const SI *si) {
+
+  DOUBLE fac1, fac2;
+  SP *sp;
+
+  sp = si->starsp;
+  if (sp->beta > 3) {
+    /*
+    ** Finite mass models
+    */
+    return (sp->rho0/tauABG(r,si));
+  }
+  else {
+    /*
+    ** Cutoff models
+    */
+    if (r <= sp->rcutoff) {
+      return (sp->rho0/tauABG(r,si));
+    }
+    else {
+      fac1 = pow((r/sp->rcutoff),sp->delta);
+      fac2 = exp(-(r-sp->rcutoff)/sp->rdecay);
+      return (sp->rho0/tauABG(sp->rcutoff,si)*fac1*fac2);
+    }
+  }
+}
+
+/* 
+** Derivative of density drho/dr 
+*/
+
+DOUBLE drhoABGdr(DOUBLE r, const SI *si) {
+
+  SP *sp;
+
+  sp = si->starsp;
+  if (sp->beta > 3) {
+    /*
+    ** Finite mass models
+    */
+    return (-rhoABG(r,si)*etaABG(r,si));
+  }
+  else {
+    /*
+    ** Cutoff models
+    */
+    if (r <= sp->rcutoff) {
+      return (-rhoABG(r,si)*etaABG(r,si));
+    }
+    else {
+      return (rhoABG(r,si)*(sp->delta/r-1/sp->rdecay));
+    }
+  }
+}
+
+/* 
+** Derivative of density d^2rho/dr^2 
+*/
+
+DOUBLE d2rhoABGdr2(DOUBLE r, const SI *si) {
+
+  SP *sp;
+
+  sp = si->starsp;
+  if (sp->beta > 3) {
+    /*
+    ** Finite mass models
+    */
+    return (rhoABG(r,si)*(pow(etaABG(r,si),2)-detaABGdr(r,si)));
+  }
+  else {
+    /*
+    ** Cutoff models
+    */
+    if (r <= sp->rcutoff) {
+      return (rhoABG(r,si)*(pow(etaABG(r,si),2)-detaABGdr(r,si)));
+    }
+    else {
+      return (rhoABG(r,si)*(pow((sp->delta/r-1/sp->rdecay),2)-sp->delta/(r*r)));
+    }
+  }
+}
+
+
+DOUBLE etaABG(DOUBLE r, const SI *si) {
+
+  DOUBLE fac1, fac2, fac3;
+  SP *sp;
+
+  sp = si->starsp;
+  fac1 = (sp->beta-sp->gamma)/sp->rs;
+  fac2 = pow((r/sp->rs),(sp->alpha-1));
+  fac3 = 1+pow((r/sp->rs),sp->alpha);
+  return ((sp->gamma/r)+(fac1*fac2/fac3));
+}
+
+DOUBLE detaABGdr(DOUBLE r, const SI *si) {
+
+  DOUBLE fac1, fac2, fac3, fac4;
+  SP *sp;
+
+  sp = si->starsp;
+  fac1 = (sp->beta-sp->gamma)/(sp->rs*sp->rs);
+  fac2 = pow((r/sp->rs),(sp->alpha-2));
+  fac3 = (sp->alpha-1)*(1+pow((r/sp->rs),sp->alpha))-sp->alpha*pow((r/sp->rs),sp->alpha);
+  fac4 = pow((1+pow((r/sp->rs),sp->alpha)),2);
+  return (-sp->gamma/(r*r)+fac1*fac2*fac3/fac4);
+}
+
+DOUBLE tauABG(DOUBLE r, const SI *si) {
+    
+  DOUBLE exp1, exp2, exp3;
+  DOUBLE fac1, fac2, fac3;
+  SP *sp;
+
+  sp = si->starsp;
+  exp1 = sp->gamma;
+  exp2 = sp->alpha;
+  exp3 = (sp->beta-sp->gamma)/sp->alpha;
+  fac1 = pow(r/sp->rs,exp1);
+  fac2 = 1+pow(r/sp->rs,exp2);
+  fac3 = pow(fac2,exp3);
+  return (fac1*fac3);
+}
+
+/*
+** Note that since the (alpha,beta,gamma) profile doesn't diverge at low
+** radii, we don't strictly need this, but including it lets us use the rest
+** of the stellar functionality
+*/
+
+DOUBLE MencInnerABG(DOUBLE r, const SI *si){
+  return integral(integrandMencStar,0,r,si);
+}
+
+
+/*
 **Integrand for stellar enclosed mass integral
 */
 
