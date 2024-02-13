@@ -29,3 +29,5 @@ spheric
 *.bin
 /runs
 *.params-usedvalues
+
+run_spheric.ipynb
