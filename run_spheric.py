@@ -13,7 +13,7 @@
 #     name: darknanograv
 # ---
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # # run_spheric
 #
 # This file represents a notebook/script used to run and test spheric.
@@ -38,12 +38,18 @@
 # -king               : generate a stellar component with a King profile
 # -hernquist          : generate a stellar component with a Hernquist profile
 # -plummer            : generate a stellar component with a Plummer profile
+# -starabg            : generate a 'stellar' component with a (alpha,beta,gamma) profile
 # -Nstar <value>      : number of star particles
 # -Mstar <value>      : total stellar mass 
 # -rc <value>         : king core radius
 # -rt <value>         : king tidal radius
 # -rhern <value>      : scale radius for Hernquist profile
 # -rp <value>         : scale radius for Plummer profile
+# -as <value>         : alpha parameter in the 'star' abg profile
+# -bs <value>         : beta parameter in the 'star' abg profile
+# -cs <value>         : gamma parameter in the 'star' abg profile
+# -rss <value>        : scale radius in the 'star' abg profile (default rss = 1)
+# -rcuts <value>      : cutoff radius for cutoff 'star' abg models (i.e. beta >= 3)
 # -MBH <value>        : mass of black hole (default MBH = 0)
 # -name <value>       : name of the output file
 # -dx/dy/dz <value>   : position offset for the initial conditions (default All = 0)
@@ -58,11 +64,13 @@
 # -nostarpot          : set this flag for excluding the stellar potential 
 # -randomseed <value> : set this flag for setting a value for a random seed (default: random value)
 # -dorvirexact        : set this flag for calculating rvir exactly via N^2 sum - Warning: time consuming for large N!
+#
+# Note: The -starabg flag is only intended for use with GIZMO initial conditions (-ogh). Usage elsewhere is not tested.
 # ```
 #
 # From running and code analysis, I think the `rs` parameter actually defaults to `-1` aka no default.
 #
-# Note: SpherIC assumes units of $10^{10}$ M$_{\odot}$, kpc, and km/s. 
+# Note: SpherIC assumes units of $10^{10}$ M$_{\odot}$, kpc, and km/s. This is **very** important! If you want to change the Halo mass later (by e.g. changing UnitMass in GIZMO) you need to rerun SpherIC. Otherwise, your sim will not function (tested from personal experience)
 
 # %% [markdown]
 # # All initialization code - Put reused functions here!
@@ -80,7 +88,7 @@ plt.rcParams['figure.dpi'] = 150
 # %% [markdown]
 #
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ## Generic helper definitions
 # These are useful for any Jupyter notebook
 
@@ -136,7 +144,7 @@ def latex_float(f):
 # %% [markdown]
 # ## SpherIC
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ### Options class
 
 # %%
@@ -155,12 +163,18 @@ class SphericOptions:
     king = False       # generate a stellar component with a King profile
     hernquist = False  # generate a stellar component with a Hernquist profile
     plummer = False    # generate a stellar component with a Plummer profile
+    starabg = False    # generate a stellar component with an (alpha,beta,gamma) profile
     Nstar = 0          # number of star particles
     Mstar = 0          # total stellar mass 
     rc = np.nan        # king core radius
     rt = np.nan        # king tidal radius
     rhern = np.nan     # scale radius for Hernquist profile
     rp = np.nan        # scale radius for Plummer profile
+    star_alpha = 1     # alpha parameter in the halo density profile
+    star_beta = 3      # beta parameter in the halo density profile
+    star_gamma = 1     # gamma parameter in the halo density profile
+    star_rs = 1        # scale radius (default rs = 1)
+    star_rcutoff = 100 # cutoff radius for cutoff halo models (i.e. beta >= 3)
     MBH = 0            # mass of black hole (default MBH = 0)
     name = ""          # name of the output file
     dx,dy,dz = 0,0,0   # position offset for the initial conditions (default All = 0)
@@ -218,6 +232,16 @@ class SphericOptions:
                     optStr = optStr + f"-b {a[1]} "
                 case ("c"|"gamma",x):
                     optStr = optStr + f"-c {a[1]} "
+                case ("star_alpha",x): # probably a better way of dealing with this
+                    optStr = optStr + f"-as {a[1]} "
+                case ("star_beta",x):
+                    optStr = optStr + f"-bs {a[1]} "
+                case ("star_gamma",x):
+                    optStr = optStr + f"-cs {a[1]} "
+                case ("star_rs",x):
+                    optStr = optStr + f"-rss {a[1]} "
+                case ("star_rcutoff",x):
+                    optStr = optStr + f"-rcuts {a[1]} "
                 #case ("Mhalo",1):
                 #    pass
                 case ("randomseed", -1):
@@ -232,7 +256,7 @@ class SphericOptions:
         return optStr
 
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ### Run spheric
 
 # %%
@@ -245,12 +269,12 @@ def spheric(opts=None):
     if p.returncode:
         return p
     # This generates a filename called {opts.name}.out which is a text file. We'll change it to {opts.name}_out.txt
-    Path(f"{opts.name}.out").rename(f"{opts.name}_out.txt")
     print(f"Changing filename {opts.name}.out to {opts.name}_out.txt")
+    Path(f"{opts.name}.out").rename(f"{opts.name}_out.txt")
     return p
 
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ### Combine Halo ICs from SpherIC
 
 # %% [markdown]
@@ -276,7 +300,7 @@ def combineICs(ic1name,ic2name,outname):
                 xo = h1.attrs[k]
             ho.attrs[k] = xo
         numpart1 = sum(h1.attrs['NumPart_Total'])
-        for pt in ['PartType1','PartType4','PartType5']:
+        for pt in ['PartType1','PartType2','PartType4','PartType5']:
             for var in ['Coordinates','Velocities','Masses','ParticleIDs']:
                 n = f"/{pt}/{var}"
                 x1 = x2 = []
@@ -287,12 +311,14 @@ def combineICs(ic1name,ic2name,outname):
                     if 'Part' in var:
                         x2 = x2 + numpart1
                 xo = np.concatenate((x1, x2))
+                if len(xo)==0:
+                    continue
                 assert len(xo) == len(x1) + len(x2),f"{len(xo)}!={len(x1)}+{len(x2)}"
                 out.create_dataset(n,data=xo)
     pass
 
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ## Density profiles
 
 # %%
@@ -322,7 +348,10 @@ def get_αβγ_prof(r,α=1,β=3,γ=1,*,sphereopts=None,rs = 1,rcut=100,Mtot=1):
     # where q is rcut/rs - not sure why Zemp didn't just use this, possibly
     # because it's more complicated
     q = rcut/rs
-    Im = q**(3-γ) * hyp2f1( (3-γ)/α, (β-γ)/α, (α-γ+3)/α, -q**α ) / (3-γ)
+    if isinstance(q,unyt_array) or isinstance(q,unyt_quantity):
+        Im = q.v**(3-γ) * hyp2f1( (3-γ)/α, (β-γ)/α, (α-γ+3)/α, -q.v**α ) / (3-γ)
+    else:
+        Im = q**(3-γ) * hyp2f1( (3-γ)/α, (β-γ)/α, (α-γ+3)/α, -q**α ) / (3-γ)
     Imcut = 0
     ρ_0 = Mtot / (4*np.pi * rs**3 * (Im + Imcut))
     
@@ -590,7 +619,7 @@ def plot_random_walk(x,y,t,*,inspos=[-0.2, -0.17, 0.15, 0.12]):
     return fig
 
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ## COM and COMs class defs
 
 # %%
@@ -775,7 +804,7 @@ class COMs:
 # %% [markdown]
 # ## Various utility stuff
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ### Add particle_acceleration_[xyz]
 
 # %%
@@ -1016,7 +1045,7 @@ def load_timeseries_from_folder(foldername,*,num_snaps=None,log_level='warning',
     return ts,(tsinds,dsnamelist)
 
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ## Simulation and Run processing
 # I expect this section will get much bigger over time, so this might be put into it's own file or something else. At least it'll probably move up to header 2.
 
@@ -1235,7 +1264,7 @@ class Simulation:
 
 # %%
 
-# %% [markdown] jp-MarkdownHeadingCollapsed=true toc-hr-collapsed=true
+# %% [markdown] toc-hr-collapsed=true
 # # Testing
 
 # %% [markdown] jp-MarkdownHeadingCollapsed=true
@@ -1444,7 +1473,7 @@ ax = fig.add_subplot(1,3,3)
 plot = ax.scatter(y,z,20,t)
 plt.colorbar(plot)
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ## Testing core profile random walk
 
 # %% [markdown] jp-MarkdownHeadingCollapsed=true
@@ -1743,8 +1772,11 @@ ax3.set_ylabel('Counts')
 
 # %%
 
-# %% [markdown] jp-MarkdownHeadingCollapsed=true
+# %% [markdown]
 # ## Generate combined test data
+
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
+# ### basic halo
 
 # %%
 from pathlib import Path
@@ -1761,6 +1793,102 @@ comproc = spheric(so2)
 # Note if this errors/is blank, spheric probably segfaulted
 print(comproc.stdout.decode()) 
 print(comproc.stderr.decode())
+
+# %% [markdown]
+# ### 2-component halo
+#
+# Basic idea is:
+# 1. Generate a single 2-component halo with same overall properties as single basic halo
+# 2. Let evolve for ~1 Gyr
+# 3. Check properties (density profile, triaxiality, etc)
+# 4. Merge evolved halos as normal
+
+# %% [markdown]
+# #### Generate a single halo first
+# To generate a two component single halo, we need to figure out some things: 
+# 1. Number of low-res and high-res DM particles - $10^4$ and $10^5$?
+# 2. `Mstar`- $\int_0^{r_i}4\pi r^2\rho_{\text{NFW}+\text{spike}}(r)dr$
+# 3. $r_s$ and $r_{cutoff}$ - use values from analytic: 80 pc=0.08 LU and 10 kpc=10 LU
+
+# %%
+from yt.units import parsec as pc
+from yt.units import kiloparsec as kpc
+from yt.units import Msun
+Nlow = 1e4
+Nhigh = 2e5
+# Since get_αβγ_prof defaults to (1,3,1)=NFW (and cored is just (1,3,0)), we only need to specify α, β, γ for the high res stuff
+α = 1
+β = 4 # β>3 is a finite mass model
+γ = 1 # This can vary from 0 (core) to <3 (divergent)
+rs = 80 * pc
+rcut = 1e2 * kpc
+Mhalo = 1 * 1e10*Msun
+Mstar = Mhalo / 1e3
+
+r = np.logspace(-2,8) * pc
+nfw = get_αβγ_prof(r,rs=1*kpc,rcut=100*kpc,Mtot=Mhalo).to('Msun/Mpc**3')
+core = get_αβγ_prof(r,γ=0,rs=1*kpc,rcut=100*kpc,Mtot=Mhalo).to('Msun/Mpc**3')
+hires = get_αβγ_prof(r,α=α,β=β,γ=γ,rs=rs,rcut=rcut,Mtot=Mstar).to('Msun/Mpc**3')
+
+fig = plt.figure(figsize=(10,3))
+ax = fig.add_subplot(121)
+ax2= fig.add_subplot(122)
+ax.loglog(r,nfw,ls='dashed',label='NFW')
+ax.loglog(r,core,ls='dashdot',label='Core')
+ax.loglog(r,hires,ls='dotted',label='Spike')
+ax.loglog(r,core+hires,label='Core+Spike')
+
+ax.axvspan(min(r),(1*kpc)/(1*r.units),alpha=0.3,label='Mstar region')
+
+ax.set_xlabel(f'r ({r.units})')
+ax.set_ylabel(f'ρ ({nfw.units})')
+
+ax.set_ylim(1e13,1e33)
+
+import scipy.integrate as integrate
+from functools import partial
+def rho_combined(r,*,α=1,β=4,γ=2,cuspcore=1,Mtot=1e10*Msun,Mstar=1e10/4e3,rs=1*kpc,rcut=100*kpc,rss=80*pc,rcuts=10*kpc):
+    return get_αβγ_prof(r*kpc,γ=cuspcore,rs=rs,rcut=rcut,Mtot=Mtot) + get_αβγ_prof(r*kpc,α=α,β=β,γ=γ,rs=rss,rcut=rcuts,Mtot=Mstar)
+def mass_enc_int(r,rho_fun,**kwargs):
+    return 4*np.pi*r**2*rho_fun(r,**kwargs)*kpc**2
+rho_fun = partial(rho_combined,α=α,β=β,γ=γ,Mtot=Mhalo,cuspcore=0,Mstar=Mstar,rss=rs,rcuts=rcut)
+mass_enc = partial(mass_enc_int,rho_fun=rho_fun)
+ax.loglog(r,rho_fun((r.to('kpc')).v).to('Msun/Mpc**3'),label='ρ combined')
+ax.legend()
+
+Mstar_calc,calc_err = integrate.quad(mass_enc,0*0.001e-3,1) # 0-1 kpc 
+print(f'{Mstar_calc/(1e10)=} with error {calc_err/1e10} (expected {Mstar/(1e10*Msun)})')
+
+mass_enc_res = [integrate.quad(mass_enc,0,ro.v) for ro in r.to('kpc')]
+me = [m for m,_ in mass_enc_res]
+Mhigh = Mstar/Nhigh
+num_parts = me / Mhigh
+ax2.loglog(r,num_parts)
+ax2.set_xlabel(f'r ({r.units})')
+ax2.set_ylabel(f'# of particles')
+
+# %% [markdown]
+# Above results suggest we need ~$2\times10^{5}$ high res particles, $M_{star} = M_{halo}/1000$, $α = 1$, $β = 4$ (a finite mass model), $γ = 1$ (to match NFW), $rs = 80$ pc, and $rcuts = 1e3$ kpc
+
+# %%
+from pathlib import Path
+folder = Path("~/workspace/Research/projects/spheric/runs").expanduser()
+so = SphericOptions(MBH=1e-3,dx=0,dy=0,name=f"{folder}/IC-twosideA-noBH",Nhalo=1e5,Mstar=1e-3,star_alpha=1,star_beta=4,star_gamma=1,star_rs=80/1e3,star_rcutoff=1e3,ogh=True)
+#so2 = SphericOptions(MBH=.5e-3,dx=50,dy=-10,dvx=-10,name=f"{folder}/IC-twosideB",Nhalo=1e5,ogh=True)
+print(f"Using for halo 1: {so.generateOptionString()}")
+#print(f"Using for halo 2: {so2.generateOptionString()}")
+comproc = spheric(so)
+# Note if this errors/is blank, spheric probably segfaulted
+print(comproc.stdout.decode()) 
+print(comproc.stderr.decode())
+#comproc = spheric(so2)
+# Note if this errors/is blank, spheric probably segfaulted
+#print(comproc.stdout.decode()) 
+#print(comproc.stderr.decode())
+
+# %%
+
+# %%
 
 # %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ## Combine Files
