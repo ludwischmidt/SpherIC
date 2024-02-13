@@ -38,7 +38,7 @@
 #define SBI 1e100
 #define CutoffFac 0.3
 #define G 1
-#define STRINGSIZE 50
+#define STRINGSIZE 100
 #define INT int
 #define FLOAT float
 #define DOUBLE double
