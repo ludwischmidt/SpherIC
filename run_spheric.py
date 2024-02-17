@@ -250,7 +250,7 @@ def spheric(opts=None):
     return p
 
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ### Combine Halo ICs from SpherIC
 
 # %% [markdown]
@@ -292,7 +292,7 @@ def combineICs(ic1name,ic2name,outname):
     pass
 
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ## Density profiles
 
 # %%
@@ -1077,6 +1077,9 @@ class Simulation:
         if not path.is_dir():
             path = path.resolve().parent
         return path
+    
+    def __repr__(self):
+        return str(self.folder)
         
     def process_sim(self,*,unit_base=None,bounding_box=None,**kwargs):
         if unit_base is None:
@@ -2469,7 +2472,8 @@ yl = ax4.get_ylim()
 ptafr=ax4.axhspan(1/year,.5e-1/year,alpha=0.5,label='PTA Freq',color=next_color(ax4))
 stelfr=ax4.axhspan(1e-3/year,1e-9/year,alpha=0.5,label='Stellar',color=next_color(ax4))
 dts = np.unique(signif(np.diff(time),2)) * time.units
-ax4.axhline(5/dts.to('yr'),label='Time resolution',color=next_color(ax4))
+for dt in dts:
+    ax4.axhline(5/dt.to('yr'),label='Time resolution',color=next_color(ax4))
 ax4.set_xlim(xl)
 ax4.set_ylim(yl)
 ax4.set_xlabel('t (Myr)')
