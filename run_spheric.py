@@ -6,14 +6,14 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.1
+#       jupytext_version: 1.16.0
 #   kernelspec:
 #     display_name: darknanograv
 #     language: python
 #     name: darknanograv
 # ---
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # # run_spheric
 #
 # This file represents a notebook/script used to run and test spheric.
@@ -38,12 +38,18 @@
 # -king               : generate a stellar component with a King profile
 # -hernquist          : generate a stellar component with a Hernquist profile
 # -plummer            : generate a stellar component with a Plummer profile
+# -starabg            : generate a 'stellar' component with a (alpha,beta,gamma) profile
 # -Nstar <value>      : number of star particles
 # -Mstar <value>      : total stellar mass 
 # -rc <value>         : king core radius
 # -rt <value>         : king tidal radius
 # -rhern <value>      : scale radius for Hernquist profile
 # -rp <value>         : scale radius for Plummer profile
+# -as <value>         : alpha parameter in the 'star' abg profile
+# -bs <value>         : beta parameter in the 'star' abg profile
+# -cs <value>         : gamma parameter in the 'star' abg profile
+# -rss <value>        : scale radius in the 'star' abg profile (default rss = 1)
+# -rcuts <value>      : cutoff radius for cutoff 'star' abg models (i.e. beta >= 3)
 # -MBH <value>        : mass of black hole (default MBH = 0)
 # -name <value>       : name of the output file
 # -dx/dy/dz <value>   : position offset for the initial conditions (default All = 0)
@@ -58,11 +64,13 @@
 # -nostarpot          : set this flag for excluding the stellar potential 
 # -randomseed <value> : set this flag for setting a value for a random seed (default: random value)
 # -dorvirexact        : set this flag for calculating rvir exactly via N^2 sum - Warning: time consuming for large N!
+#
+# Note: The -starabg flag is only intended for use with GIZMO initial conditions (-ogh). Usage elsewhere is not tested.
 # ```
 #
 # From running and code analysis, I think the `rs` parameter actually defaults to `-1` aka no default.
 #
-# Note: SpherIC assumes units of $10^{10}$ M$_{\odot}$, kpc, and km/s. 
+# Note: SpherIC assumes units of $10^{10}$ M$_{\odot}$, kpc, and km/s. This is **very** important! If you want to change the Halo mass later (by e.g. changing UnitMass in GIZMO) you need to rerun SpherIC. Otherwise, your sim will not function (tested from personal experience)
 
 # %% [markdown]
 # # All initialization code - Put reused functions here!
@@ -80,7 +88,7 @@ plt.rcParams['figure.dpi'] = 150
 # %% [markdown]
 #
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ## Generic helper definitions
 # These are useful for any Jupyter notebook
 
@@ -136,7 +144,7 @@ def latex_float(f):
 # %% [markdown]
 # ## SpherIC
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ### Options class
 
 # %%
@@ -155,12 +163,18 @@ class SphericOptions:
     king = False       # generate a stellar component with a King profile
     hernquist = False  # generate a stellar component with a Hernquist profile
     plummer = False    # generate a stellar component with a Plummer profile
+    starabg = False    # generate a stellar component with an (alpha,beta,gamma) profile
     Nstar = 0          # number of star particles
     Mstar = 0          # total stellar mass 
     rc = np.nan        # king core radius
     rt = np.nan        # king tidal radius
     rhern = np.nan     # scale radius for Hernquist profile
     rp = np.nan        # scale radius for Plummer profile
+    star_alpha = 1     # alpha parameter in the halo density profile
+    star_beta = 3      # beta parameter in the halo density profile
+    star_gamma = 1     # gamma parameter in the halo density profile
+    star_rs = 1        # scale radius (default rs = 1)
+    star_rcutoff = 100 # cutoff radius for cutoff halo models (i.e. beta >= 3)
     MBH = 0            # mass of black hole (default MBH = 0)
     name = ""          # name of the output file
     dx,dy,dz = 0,0,0   # position offset for the initial conditions (default All = 0)
@@ -218,6 +232,16 @@ class SphericOptions:
                     optStr = optStr + f"-b {a[1]} "
                 case ("c"|"gamma",x):
                     optStr = optStr + f"-c {a[1]} "
+                case ("star_alpha",x): # probably a better way of dealing with this
+                    optStr = optStr + f"-as {a[1]} "
+                case ("star_beta",x):
+                    optStr = optStr + f"-bs {a[1]} "
+                case ("star_gamma",x):
+                    optStr = optStr + f"-cs {a[1]} "
+                case ("star_rs",x):
+                    optStr = optStr + f"-rss {a[1]} "
+                case ("star_rcutoff",x):
+                    optStr = optStr + f"-rcuts {a[1]} "
                 #case ("Mhalo",1):
                 #    pass
                 case ("randomseed", -1):
@@ -231,11 +255,11 @@ class SphericOptions:
                     optStr = optStr + f"-{a[0]} {a[1]} "
         return optStr
 
-
 # %% [markdown]
 # ### Run spheric
 
 # %%
+import warnings
 def spheric(opts=None):
     if opts is None:
         opts = SphericOptions()
@@ -243,10 +267,13 @@ def spheric(opts=None):
     args = opts.generateOptionString()
     p = subprocess.run([cmd,*args.split()],capture_output=True)
     if p.returncode:
+        warnings.warn(f'SpherIC crashed (returned error code {p.returncode}). Check from command line to see any additional info')
+        warnings.warn('Note if you get an error about hdf5 version mismatch and you are in a conda environment,'
+                      ' try deactivating (possibly reactivating) and recompiling. Sometimes that fixes it')
         return p
     # This generates a filename called {opts.name}.out which is a text file. We'll change it to {opts.name}_out.txt
-    Path(f"{opts.name}.out").rename(f"{opts.name}_out.txt")
     print(f"Changing filename {opts.name}.out to {opts.name}_out.txt")
+    Path(f"{opts.name}.out").rename(f"{opts.name}_out.txt")
     return p
 
 
@@ -276,7 +303,7 @@ def combineICs(ic1name,ic2name,outname):
                 xo = h1.attrs[k]
             ho.attrs[k] = xo
         numpart1 = sum(h1.attrs['NumPart_Total'])
-        for pt in ['PartType1','PartType4','PartType5']:
+        for pt in ['PartType1','PartType2','PartType4','PartType5']:
             for var in ['Coordinates','Velocities','Masses','ParticleIDs']:
                 n = f"/{pt}/{var}"
                 x1 = x2 = []
@@ -287,6 +314,8 @@ def combineICs(ic1name,ic2name,outname):
                     if 'Part' in var:
                         x2 = x2 + numpart1
                 xo = np.concatenate((x1, x2))
+                if len(xo)==0:
+                    continue
                 assert len(xo) == len(x1) + len(x2),f"{len(xo)}!={len(x1)}+{len(x2)}"
                 out.create_dataset(n,data=xo)
     pass
@@ -322,7 +351,10 @@ def get_αβγ_prof(r,α=1,β=3,γ=1,*,sphereopts=None,rs = 1,rcut=100,Mtot=1):
     # where q is rcut/rs - not sure why Zemp didn't just use this, possibly
     # because it's more complicated
     q = rcut/rs
-    Im = q**(3-γ) * hyp2f1( (3-γ)/α, (β-γ)/α, (α-γ+3)/α, -q**α ) / (3-γ)
+    if isinstance(q,unyt_array) or isinstance(q,unyt_quantity):
+        Im = q.v**(3-γ) * hyp2f1( (3-γ)/α, (β-γ)/α, (α-γ+3)/α, -q.v**α ) / (3-γ)
+    else:
+        Im = q**(3-γ) * hyp2f1( (3-γ)/α, (β-γ)/α, (α-γ+3)/α, -q**α ) / (3-γ)
     Imcut = 0
     ρ_0 = Mtot / (4*np.pi * rs**3 * (Im + Imcut))
     
@@ -366,6 +398,7 @@ def rho_prof(*,ds=None,radius=None,center=None,sphere=None,
     wfield = numfield
     volume_normal = False
     if rhofield not in sphere.ds.field_list:
+        print(f'{rhofield} not in sphere.ds.field_list. Using ({pt},"Masses") instead.')
         rhofield = (pt,"Masses")
         volume_normal = True
         wfield = None
@@ -590,7 +623,7 @@ def plot_random_walk(x,y,t,*,inspos=[-0.2, -0.17, 0.15, 0.12]):
     return fig
 
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ## COM and COMs class defs
 
 # %%
@@ -775,7 +808,7 @@ class COMs:
 # %% [markdown]
 # ## Various utility stuff
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ### Add particle_acceleration_[xyz]
 
 # %%
@@ -783,12 +816,7 @@ from yt.units import centimeter as cm
 from yt.units import second as s
 from yt.utilities.exceptions import YTFieldNotFound 
 def _particle_acceleration(field, data, ftype, axis, units = cm/s**2):
-    try:
-        return data[ftype,"Acceleration"][:,axis] * units
-    except YTFieldNotFound:
-        # Acceleration field does not exist (presumably because OUTPUT_ACCELERATION
-        # isn't on) so return nan's with the same shape and units
-        return np.nan*data[ftype,"Coordinates"][:,axis].v * units
+    return data[ftype,"Acceleration"][:,axis] * units
 
 from functools import partial
 def add_particle_acceleration(ds,ftype="PartType5",force_override=False):
@@ -802,19 +830,24 @@ def add_particle_acceleration(ds,ftype="PartType5",force_override=False):
             units=units,
             force_override=force_override,
         )
-        
+
+# I cannot get the following to work. As far as I can tell, I'm using validators
+# correctly 
 # add as new field going forward
-units = cm/s**2
-for ftype in ['PartType1','PartType5']:
-    for i,ax in enumerate("xyz"):
-        yt.add_field(
-            (ftype, f"particle_acceleration_{ax}"),
-            function=partial(_particle_acceleration,ftype=ftype,axis=i,units=units),
-            sampling_type="particle",
-            display_name=f"a_{ax}",
-            units=units,
-            force_override=True,
-        )
+#from yt.fields.derived_field import ValidateDataField
+#units = cm/s**2
+#for ftype in ['PartType1','PartType2','PartType4','PartType5']:
+#    for i,ax in enumerate("xyz"):
+#        yt.add_field(
+#            (ftype, f"particle_acceleration_{ax}"),
+#            function=partial(_particle_acceleration,ftype=ftype,axis=i,units=units),
+#            sampling_type="particle",
+#            display_name=f"a_{ax}",
+#            units=units,
+#            validators=[ValidateDataField((ftype,"Acceleration"))],
+#            force_override=True,
+#        )
+
 
 # %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ### Remove bulk coords/velocity - Deprecated - use COM stuff instead
@@ -1016,7 +1049,7 @@ def load_timeseries_from_folder(foldername,*,num_snaps=None,log_level='warning',
     return ts,(tsinds,dsnamelist)
 
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ## Simulation and Run processing
 # I expect this section will get much bigger over time, so this might be put into it's own file or something else. At least it'll probably move up to header 2.
 
@@ -1238,7 +1271,7 @@ class Simulation:
 
 # %%
 
-# %% [markdown] jp-MarkdownHeadingCollapsed=true toc-hr-collapsed=true
+# %% [markdown] toc-hr-collapsed=true
 # # Testing
 
 # %% [markdown] jp-MarkdownHeadingCollapsed=true
@@ -1447,7 +1480,7 @@ ax = fig.add_subplot(1,3,3)
 plot = ax.scatter(y,z,20,t)
 plt.colorbar(plot)
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ## Testing core profile random walk
 
 # %% [markdown] jp-MarkdownHeadingCollapsed=true
@@ -1746,8 +1779,11 @@ ax3.set_ylabel('Counts')
 
 # %%
 
-# %% [markdown] jp-MarkdownHeadingCollapsed=true
+# %% [markdown]
 # ## Generate combined test data
+
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
+# ### basic halo
 
 # %%
 from pathlib import Path
@@ -1764,6 +1800,157 @@ comproc = spheric(so2)
 # Note if this errors/is blank, spheric probably segfaulted
 print(comproc.stdout.decode()) 
 print(comproc.stderr.decode())
+
+# %% [markdown]
+# ### 2-component halo
+#
+# Basic idea is:
+# 1. Generate a single 2-component halo with same overall properties as single basic halo
+# 2. Let evolve for ~1 Gyr
+# 3. Check properties (density profile, triaxiality, etc)
+# 4. Merge evolved halos as normal
+
+# %% [markdown]
+# #### Generate a single halo first
+# To generate a two component single halo, we need to figure out some things: 
+# 1. Number of low-res and high-res DM particles - $10^4$ and $10^5$?
+# 2. `Mstar`- $\int_0^{r_i}4\pi r^2\rho_{\text{NFW}+\text{spike}}(r)dr$
+# 3. $r_s$ and $r_{cutoff}$ - use values from analytic: 80 pc=0.08 LU and 10 kpc=10 LU
+
+# %%
+from yt.units import parsec as pc
+from yt.units import kiloparsec as kpc
+from yt.units import Msun
+Nlow = 1e4
+Nhigh = 2e5
+# Since get_αβγ_prof defaults to (1,3,1)=NFW (and cored is just (1,3,0)), we only need to specify α, β, γ for the high res stuff
+α = 1
+β = 4 # β>3 is a finite mass model
+γ = 2 # This can vary from 0 (core) to <3 (divergent)
+rs = 80 * pc
+rcut = 1e2 * kpc
+Mhalo = 1 * 1e10*Msun
+Mstar = Mhalo / 1e3
+
+r = np.logspace(-2,8) * pc
+nfw = get_αβγ_prof(r,rs=1*kpc,rcut=100*kpc,Mtot=Mhalo).to('Msun/Mpc**3')
+core = get_αβγ_prof(r,γ=0,rs=1*kpc,rcut=100*kpc,Mtot=Mhalo).to('Msun/Mpc**3')
+hires = get_αβγ_prof(r,α=α,β=β,γ=γ,rs=rs,rcut=rcut,Mtot=Mstar).to('Msun/Mpc**3')
+
+fig = plt.figure(figsize=(10,3))
+ax = fig.add_subplot(121)
+ax2= fig.add_subplot(122)
+ax.loglog(r,nfw,ls='dashed',label='NFW')
+ax.loglog(r,core,ls='dashdot',label='Core')
+ax.loglog(r,hires,ls='dotted',label='Spike')
+ax.loglog(r,core+hires,label='Core+Spike')
+
+ax.axvspan(min(r),(rcut)/(1*r.units),alpha=0.3,label='Mstar region')
+
+ax.set_xlabel(f'r ({r.units})')
+ax.set_ylabel(f'ρ ({nfw.units})')
+
+ax.set_ylim(1e13,1e33)
+
+import scipy.integrate as integrate
+from functools import partial
+def rho_combined(r,*,α=1,β=4,γ=2,cuspcore=1,Mtot=1e10*Msun,Mstar=1e10/4e3,rs=1*kpc,rcut=100*kpc,rss=80*pc,rcuts=10*kpc):
+    return get_αβγ_prof(r*kpc,γ=cuspcore,rs=rs,rcut=rcut,Mtot=Mtot) + get_αβγ_prof(r*kpc,α=α,β=β,γ=γ,rs=rss,rcut=rcuts,Mtot=Mstar)
+def mass_enc_int(r,rho_fun,**kwargs):
+    return 4*np.pi*r**2*rho_fun(r,**kwargs)*kpc**2
+rho_fun = partial(rho_combined,α=α,β=β,γ=γ,Mtot=Mhalo,cuspcore=1,Mstar=Mstar,rss=rs,rcuts=rcut)
+mass_enc = partial(mass_enc_int,rho_fun=rho_fun)
+ax.loglog(r,rho_fun((r.to('kpc')).v).to('Msun/Mpc**3'),label='ρ combined')
+ax.legend()
+
+Mstar_calc,calc_err = integrate.quad(mass_enc,0*0.001e-3,1) # 0-1 kpc 
+print(f'{Mstar_calc/(1e10)=} with error {calc_err/1e10} (expected {Mstar/(1e10*Msun)})')
+
+mass_enc_res = [integrate.quad(mass_enc,0,ro.v) for ro in r.to('kpc')]
+me = [m for m,_ in mass_enc_res]
+Mhigh = Mstar/Nhigh
+num_parts = me / Mhigh
+ax2.loglog(r,num_parts)
+ax2.set_xlabel(f'r ({r.units})')
+ax2.set_ylabel(f'# of particles')
+
+# %% [markdown]
+# Above results suggest we need ~$2\times10^{5}$ high res particles, $M_{star} = M_{halo}/1000$, $α = 1$, $β = 4$ (a finite mass model), $γ = 1$ (to match NFW), $rs = 80$ pc, and $rcuts = 1e3$ kpc
+
+# %%
+from pathlib import Path
+folder = Path("~/workspace/Research/projects/spheric/runs").expanduser()
+so_noBH = SphericOptions(MBH=0,dx=0,dy=0,name=f"{folder}/IC-twosideA-noBH",Nhalo=1e4,starabg=True,
+                    Nstar=2e5,Mstar=1e-3,star_alpha=1,star_beta=4,star_gamma=2,star_rs=80/1e3,star_rcutoff=1e2,ogh=True)
+so_wiBH = SphericOptions(MBH=1e-3,dx=0,dy=0,name=f"{folder}/IC-twosideA-wiBH",Nhalo=1e4,starabg=True,
+                    Nstar=2e5,Mstar=1e-3,star_alpha=1,star_beta=4,star_gamma=2,star_rs=80/1e3,star_rcutoff=1e2,ogh=True)
+#so2 = SphericOptions(MBH=.5e-3,dx=50,dy=-10,dvx=-10,name=f"{folder}/IC-twosideB",Nhalo=1e5,ogh=True)
+print(f"Using for halo w/o BH: {so_noBH.generateOptionString()}")
+print(f"Using for halo w/  BH: {so_wiBH.generateOptionString()}")
+#print(f"Using for halo 2: {so2.generateOptionString()}")
+#print('Not currently working. Try from commandline instead')
+#exit()
+comproc = spheric(so_noBH)
+# Note if this errors/is blank, spheric probably segfaulted
+print(comproc.stdout.decode()) 
+print(comproc.stderr.decode())
+comproc = spheric(so_wiBH)
+# Note if this errors/is blank, spheric probably segfaulted
+print(comproc.stdout.decode()) 
+print(comproc.stderr.decode())
+#comproc = spheric(so2)
+# Note if this errors/is blank, spheric probably segfaulted
+#print(comproc.stdout.decode()) 
+#print(comproc.stderr.decode())
+
+# %%
+import yt
+
+yt.set_log_level('warning')
+ds = yt.load('../../runs/spike_test_nBH/IC-twosideA-noBH-gizmo.hdf5',bounding_box=[[-600,600]]*3)
+
+plot = yt.ParticleProjectionPlot(ds,'z',origin='native',width=(.5,'kpc'),window_size=(10,3))
+if ('PartType5','Coordinates') in ds.field_list:
+    plot.annotate_particles(20,ptype="PartType5",col="orange",p_size=10,alpha=0.75)
+if ('PartType2','Coordinates') in ds.field_list:
+    plot.annotate_particles(20,ptype='PartType2',col='red',p_size=10,alpha=0.5)
+#plot.show()
+
+#fig=plt.figure(figsize=(4,4))
+fig = plot.export_to_mpl_figure((1,1))
+ax1 = fig.add_subplot(122)
+rhohr,(prof,npart) = rho_prof(ds=ds,radius=(500,'kpc'),stretch='nan')
+rhohr = rhohr.to("code_mass/kpc**3")
+r = prof.x.to("kpc")
+ax1.loglog(r,rhohr,'.-',label=f"Hi-res DM")
+rho_αβγ130 = get_αβγ_prof(r.v,)
+rho_αβγNFW = get_αβγ_prof(r.v,γ=0)
+rholr,(prof,npart) = rho_prof(ds=ds,radius=(500,'kpc'),stretch='nan',pt='PartType2')
+rholr = rholr.to("code_mass/kpc**3")
+rlr = prof.x.to("kpc")
+ax1.loglog(rlr,rholr,'.-',label=f"Lo-res DM")
+
+ax1.loglog(r, rho_αβγ130,label=f'({1},{3},{0})')
+ax1.loglog(r, rho_αβγNFW,label=f'({1},{3},{1})')
+mass_unit = ds.mass_unit.to("Msun")
+mus = latex_float(mass_unit)
+ax1.set_xlabel(f"r ({r.units})")
+ax1.set_ylabel(f'ρ$(r)$ (${mus}$ M$_{{\odot}}$/kpc)')
+handles, labels = ax1.get_legend_handles_labels()
+ax1.legend()
+#fig.legend(handles, labels, loc='outside right')
+fig.tight_layout()
+fig.subplots_adjust(wspace=0.6*4)
+
+# %% [markdown]
+# ```
+# Nstar     = 200000
+# starPmass =  5.0000000e-09 MU
+# Mstar     =  1.0000000e-03 MU
+# K         =  8.8425986e-03 MU LU^-3  ->  Normalization constant for the stellar model. 
+# rp        =  3.0000000e-01 LU
+# ```
+#
 
 # %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ## Combine Files
@@ -1782,12 +1969,12 @@ import yt
 
 ds = yt.load('../../gizmo-public/output/combined/snapshot_000.hdf5',bounding_box=[[-600,600]]*3)
 
-# %% jupyter={"outputs_hidden": true}
+# %%
 plot = yt.ParticleProjectionPlot(ds,"z",("PartType1","Masses"),origin='native',window_size=(4,4),width=(100,'kpc'),center=([25,0,0],'kpc'))
 plot.annotate_particles(20,ptype='PartType5',col='orange',p_size=25)
 plot.show()
 
-# %% jupyter={"outputs_hidden": true, "source_hidden": true}
+# %% jupyter={"source_hidden": true}
 sph1 = get_sphere(ds=ds,radius=(800,"kpc"),center=([50,-10,0],"kpc"),refine=True,ref_radius=(20,'kpc'))
 rhodm1,(prof1,npart1) = rho_prof(sphere=sph1,stretch=False)
 rhodm1 = rhodm1.to("code_mass/kpc**3")
@@ -1822,7 +2009,7 @@ ts = sorted(ts,key=attrgetter('current_time'))
 print(f'Loaded {len(ts)} snapshots')
 
 
-# %% jupyter={"outputs_hidden": true}
+# %%
 def plotmerger(ds,*,width=(300,'kpc'),**kwargs):
     col_field = ("PartType1","Masses")
     plot = yt.ParticleProjectionPlot(ds,"z",col_field,width=width,window_size=(3,3),origin='native',**kwargs)
@@ -1884,7 +2071,7 @@ for ix,ds in enumerate(tqdm(ts)):
     masses[ix,:] = [mas[i1],mas[i2]]
 
 
-# %% jupyter={"outputs_hidden": true, "source_hidden": true}
+# %% jupyter={"source_hidden": true}
 # Plot merging halos in CoM frame
 def plot_merging_bhs(xo,yo,t,*,zo=None,inspos=[1, -9.75, 18, 3.5],ixl=None,iyl=None):
     fig = plt.figure(figsize=(12,8))
@@ -1958,7 +2145,7 @@ fig = plot_merging_bhs(x,y,t,#zo=z,
                        ixl=[-.4,.4],iyl=[-.4,.4])
 fig.gca().set_title('BH movement (CoM frame)')
 
-# %%
+# %% jupyter={"source_hidden": true}
 from functools import partial
 
 def animate_merger(xo,yo,t,*,num_points=50,step=5,offset=0):
@@ -2106,7 +2293,7 @@ ax.plot(t,dEdt)
 # %% [markdown]
 # Since $W_{gw} = \frac{32}{5} G \mu^2 \omega^6 r^4$, $\frac{dE}{d\omega}=\frac{W_{gw}}{\dot{\omega}}$ and we now have $r$, $\omega$, and $\dot{\omega}$, we can calculate $\frac{dE}{d\omega}$ directly. But then $h^2(\omega)\sim \frac{16\pi G}{c^2 \omega} \frac{dE}{d\omega}$
 
-# %%
+# %% jupyter={"source_hidden": true}
 from unyt import gravitational_constant as G
 from unyt import speed_of_light as c
 
@@ -2186,7 +2373,7 @@ animate_merge(sim.ts,num_frames=20,tsinds=sim.inds,width=(100,'kpc'),center=([15
 
 # %%
 
-# %% jupyter={"outputs_hidden": true, "source_hidden": true}
+# %% jupyter={"source_hidden": true}
 from yt.units import parsec as pc
 from yt.utilities.exceptions import YTFieldNotFound
 ds = sim.ts[-1]
@@ -2244,7 +2431,7 @@ ax1.set_ylim(bh1[1]-yw,bh1[1]+yw)
 ax2.set_xlim(bh2[0]-xw,bh2[0]+xw)
 ax2.set_ylim(bh2[1]-yw,bh2[1]+yw)
 
-# %% jupyter={"outputs_hidden": true, "source_hidden": true}
+# %% jupyter={"source_hidden": true}
 from functools import partial
 
 def animate_merger(sim,*,num_points=50,step=5,offset=0):
@@ -2304,7 +2491,7 @@ ani
 # %% [markdown]
 # ## Circular analysis
 
-# %% jupyter={"outputs_hidden": true, "source_hidden": true}
+# %% jupyter={"source_hidden": true}
 foldername = '~/storage/runs/IgorTest/outputs-public/snapshot_*.hdf5'
 sim = Simulation(foldername)
 exit()
@@ -2501,7 +2688,7 @@ if len(sim.trajs)<7:
 # %% [markdown]
 # ## Density profiles
 
-# %% jupyter={"outputs_hidden": true, "source_hidden": true}
+# %% jupyter={"source_hidden": true}
 #from operator import attrgetter
 #unit_base = {
 #            "length": (1.0, "kpc"),
