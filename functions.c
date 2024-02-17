@@ -9,6 +9,7 @@
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
+#include <gsl/gsl_sf.h>
 #include "definitions.h"
 #include "functions.h"
 
@@ -1158,13 +1159,39 @@ DOUBLE tauABG(DOUBLE r, const SI *si) {
 }
 
 /*
-** Note that since the (alpha,beta,gamma) profile doesn't diverge at low
-** radii, we don't strictly need this, but including it lets us use the rest
-** of the stellar functionality
+** MencInner here is equivalent to the expansion around 0 of 4*pi*r_s^3*IM 
+** where IM= q^(3-gamma)/(3-gamma) * 
+** 2F1((3-gamma)/alpha,(beta-gamma)/alpha,(alpha-gamma+3)/alpha,-q^alpha) where
+** 2F1 is the hypergeometric_2F1 function. 2F1 doesn't work well when q is near
+** 1 (and is undefined when q>1). q is simply r/r_s
+** Open question: Is specfunc's implementation of 2F1 as accurate as the small
+** q expansion defined here for hernquist/plummer/etc.
 */
 
 DOUBLE MencInnerABG(DOUBLE r, const SI *si){
-  return integral(integrandMencStar,0,r,si);
+  DOUBLE rs,q;
+  DOUBLE a,b,c,x;
+  DOUBLE h2f1,IM;
+  SP *sp;
+  gsl_sf_result res;
+  int status;
+
+  sp = si->starsp;
+  rs = sp->rs;
+  q = r/rs;
+
+  a = (3.0-sp->gamma)/sp->alpha;
+  b = (sp->beta-sp->gamma)/sp->alpha;
+  c = (sp->alpha-sp->gamma+3.0)/sp->alpha;
+  x = -pow(q,sp->alpha);
+
+  status = gsl_sf_hyperg_2F1_e(a, b, c, x, &res);
+  h2f1 = res.val;
+  if (status != GSL_SUCCESS) {
+    fprintf(stderr,"hyper_2f1 function returned %d and a value of "OFD3" with error "OFD3"\n",status,res.val,res.err);
+  }
+  IM = pow(q,3-sp->gamma) / (3-sp->gamma) * h2f1;
+  return 4*M_PI*rs*rs*rs*IM;
 }
 
 
@@ -1200,6 +1227,8 @@ DOUBLE MencInnerStar(DOUBLE r, const SI *si){
     return  (MencInnerPlummer(r,si));
   }else if (si->hernquist_flag == 1){
     return  (MencInnerHernquist(r,si));
+  }else if (si->starabg_flag == 1){
+    return (MencInnerABG(r,si));
   }  else { 
     fprintf(stderr,"WARNING: MencInnerStar returned 0 \n");
     return (0.0);
@@ -1220,6 +1249,8 @@ DOUBLE rhoStar(DOUBLE r, const SI *si){
     return (rhoPlummer(r,si));
   }else if (si->hernquist_flag == 1){
     return (rhoHernquist(r,si));
+  }else if (si->starabg_flag == 1){
+    return (rhoABG(r,si));
   } else { 
     fprintf(stderr,"WARNING: rhoStar returned 0 \n");
     return (0.0);
@@ -1234,6 +1265,8 @@ DOUBLE drhoStardr(DOUBLE r, const SI *si){
     return  (drhoPlummerdr(r,si));
   }else if (si->hernquist_flag == 1){
     return  (drhoHernquistdr(r,si));
+  }else if (si->starabg_flag == 1){
+    return (drhoABGdr(r,si));
   } else { 
     fprintf(stderr,"WARNING: drhoStardr returned 0 \n");
     return (0.0);
@@ -1248,6 +1281,8 @@ DOUBLE d2rhoStardr2(DOUBLE r, const SI *si){
     return  (d2rhoPlummerdr2(r,si));
   }else if (si->hernquist_flag == 1){
     return  (d2rhoHernquistdr2(r,si));
+  }else if (si->starabg_flag == 1){
+    return (d2rhoABGdr2(r,si));
   } else { 
     fprintf(stderr,"WARNING: d2rhoStardr2 returned 0 \n");
     return (0.0);

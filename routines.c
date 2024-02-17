@@ -103,6 +103,11 @@ void check_main_parameters(SI *si) {
     fprintf(stderr,"You have set the -nonstarpot flag ON and the -halo flag OFF. You can't exlude the stellar potenteial without having a halo system.\n");	
     usage();
   }
+  if (si->Nstar > 0 && si->stars_flag==0){
+    fprintf(stderr,"Missing or bad parameter:\n");
+    fprintf(stderr,"You have set the number of star particles without setting one of the four stellar distributions (-king, -plummer, -hernquist, or -starabg).\n");
+    usage();
+  }
   if (si->halo_flag == 1)
     {	
       if (si->sp->alpha == -1) {
@@ -156,7 +161,7 @@ void check_main_parameters(SI *si) {
       }
       if (((si->king_flag == 1 ) && (si->plummer_flag == 1)) || ((si->king_flag == 1 ) && (si->hernquist_flag == 1)) || ((si->plummer_flag == 1 ) && (si->hernquist_flag == 1)) || (si->starabg_flag ==1 && ((si->plummer_flag == 1) || (si->king_flag == 1) || (si->hernquist_flag == 1)))) {		
 	fprintf(stderr,"Missing or bad parameter:\n");
-	fprintf(stderr,"You can only use one of the stellar profile options (-king, -plummer, or -hernquist)\n");
+	fprintf(stderr,"You can only use one of the stellar profile options (-king, -plummer, -hernquist, or -starabg)\n");
 	usage();
       }
 
@@ -307,18 +312,20 @@ void calculate_parameters(SI *si) {
       si->rinner = FACTORRINNER*si->sp->rp;
       si->routerStar = si->sp->rp;
       while (rhoStar(si->sp->rp,si)/rhoStar(si->routerStar,si) < FACTORROUTERSTAR) {
-	si->routerStar = si->routerStar*1.1;
+        si->routerStar = si->routerStar*1.1;
       }
     } else if (si->hernquist_flag == 1){
       si->rinner = FACTORRINNER*si->sp->rhern;
       if(si-> halo_flag == 1){
-	si->routerStar = si->router;
+        si->routerStar = si->router;
       } else 	si->routerStar = si->sp->rhern*500;
       //		while (rhoStar(si->sp->rhern,si)/rhoStar(si->routerStar,si) < FACTORROUTERSTAR) {
       //		si->routerStar = si->routerStar*1.1;
       //		}
-    } else if (si->starabg_flag == 1){
+    }
+    if (si->starabg_flag == 1){
       // Need to copy this over
+      fprintf(stderr,"Processing stellarABG model parameters\n");
       si->starsp->M = si->sp->Mstar;
       si->starsp->Mstar = si->sp->Mstar;
       if (si->starsp->beta > 3) {
@@ -332,18 +339,35 @@ void calculate_parameters(SI *si) {
         }
         if (si->starsp->rcutoff != -1) {
           fprintf(stderr,"Warning: ");
-          fprintf(stderr,"For finite mass models the cutoff radius rcutoff is not needed!\n");
-          fprintf(stderr,"Hence, your input for the cutoff radius rcutoff (= "OFD1" LU) was ignored.\n",si->starsp->rcutoff);
+          fprintf(stderr,"For finite mass models the cutoff radius rcuts is not needed!\n");
+          fprintf(stderr,"Hence, your input for the cutoff radius rcuts (= "OFD1" LU) was ignored.\n",si->starsp->rcutoff);
         }
         si->starsp->rdecay = 0;
         si->starsp->delta = 0;
         // TODO: I think M --> Mstar in the following line, but not sure yet
         // Actually since we set starsp->M  = sp->Mstar, it might be correct
-        IM = exp(lgamma((si->starsp->beta-3)/si->starsp->alpha));
-        IM *= exp(lgamma((3-si->starsp->gamma)/si->starsp->alpha));
-        IM /= (si->starsp->alpha*exp(lgamma((si->starsp->beta-si->starsp->gamma)/si->starsp->alpha)));
-        si->starsp->rho0 = si->starsp->M/(4*M_PI*(si->starsp->rs*si->starsp->rs*si->starsp->rs)*IM);
+        IMStar = exp(lgamma((si->starsp->beta-3)/si->starsp->alpha));
+        fprintf(stderr,"Original abg IMStar: "OFD3"\n",IMStar);
+        if (si->hernquist_flag == 1) {
+          IMStar = MencInnerHernquist(1e-6,si);
+          fprintf(stderr,"Hernquist IMStar: "OFD3"\n",IMStar);
+        } else if (si->plummer_flag == 1) {
+          IMStar = MencInnerPlummer(1e-6,si);
+          fprintf(stderr,"Plummer IMStar: "OFD3"\n",IMStar);
+        }
+        si->hernquist_flag = 0;
+        si->plummer_flag = 0;
+        IMStar = MencInnerABG(1e-6,si);
+        fprintf(stderr,"2f1 ABG IMStar: "OFD3"\n",IMStar);
+        si->starsp->rho0 = 1.0;
         si->starsp->rcutoff = SBI;
+        IMStar = rhoPlummer(1e-6,si);
+        fprintf(stderr,"Plummer rho(1e-6): "OFD3"\n",IMStar);
+        IMStar = rhoHernquist(1e-6,si);
+        fprintf(stderr,"Hernquist rho(1e-6): "OFD3"\n",IMStar);
+        IMStar = rhoABG(1e-6,si);
+        fprintf(stderr,"ABG rho(1e-6): "OFD3"\n",IMStar);
+        //exit(1);
       } else {
         /*
         ** Cutoff models
@@ -355,17 +379,16 @@ void calculate_parameters(SI *si) {
         }
         si->starsp->rdecay = CutoffFac*si->starsp->rcutoff;
         si->starsp->delta = si->starsp->rcutoff/si->starsp->rdecay + dlrhodlr(si->starsp->rcutoff,si);
-        IM = pow(1e-6,3-si->starsp->gamma)/(3-si->starsp->gamma); /* approximate inner integral */
-        IM += integral(integrandIM,1e-6,si->starsp->rcutoff/si->starsp->rs,si);
-        IMcutoff = 1/tau(si->starsp->rcutoff,si);
-        IMcutoff *= 1/(si->starsp->rs*si->starsp->rs*si->starsp->rs);
-        IMcutoff *= integral(integrandIMcutoff,si->starsp->rcutoff,si->starsp->rcutoff+2000*si->starsp->rdecay,si);
-        IM += IMcutoff;
-        si->starsp->rho0 = si->starsp->M/(4*M_PI*(si->starsp->rs*si->starsp->rs*si->starsp->rs)*IM);
       }
+      si->rinner = FACTORRINNER*si->starsp->rs;
+      si->routerStar = si->starsp->rcutoff;
+      if(si-> halo_flag == 1){
+        si->routerStar = si->router;
+      } else 	si->routerStar = si->sp->rs*500;
     }
     if (si-> halo_flag == 0) si->router = si->routerStar;
-  	
+
+    fprintf(stderr,"Computing IMstar for a -plummer/king/hernquist model.\n");
     IMStar = MencInnerStar(1e-6,si);
     IMStar += integral(integrandMencStar,1e-6,si->routerStar,si);
     si->sp->K = si->sp->Mstar/IMStar;
@@ -385,11 +408,14 @@ void calculate_parameters(SI *si) {
       fprintf(stderr,"rhern     = "OFD3" LU\n\n",si->sp->rhern);
     }
     if (si->starabg_flag ==1) {
-      fprintf(stderr,"alpha_star= "OFD3"\n",si->starsp->alpha);
-      fprintf(stderr,"beta_star = "OFD3"\n",si->starsp->beta);
-      fprintf(stderr,"gamma_star= "OFD3"\n",si->starsp->gamma);
+      fprintf(stderr,"alpha_star= "OFD1"\n",si->starsp->alpha);
+      fprintf(stderr,"beta_star = "OFD1"\n",si->starsp->beta);
+      fprintf(stderr,"gamma_star= "OFD1"\n",si->starsp->gamma);
       fprintf(stderr,"rs_star   = "OFD3" LU\n",si->starsp->rs);
-      fprintf(stderr,"rcut_star = "OFD3" LU\n\n",si->starsp->rcutoff);
+      if (si->starsp->rcutoff != SBI) {
+        fprintf(stderr,"rcutoff   = "OFD3" LU\n",si->starsp->rcutoff);
+        fprintf(stderr,"rdecay    = "OFD3" LU\n\n",si->starsp->rdecay);
+      }
     }
   }
 	
@@ -1262,6 +1288,7 @@ void displace(SI *si,PARTICLE *bh){
   N = si->N;
   Nstar = si->Nstar;
 
+  fprintf(stderr,"Displacing %d DM particles\n",N);
   for(i = 0; i < N; i++) {
     for(j = 0; j < 3 ; j++){
       p[i].r[j+1] = p[i].r[j+1] + si->deltapos[j];
@@ -1269,6 +1296,7 @@ void displace(SI *si,PARTICLE *bh){
     }
   }
 
+  fprintf(stderr,"\b\b...Done\nDisplacing %d Star particles\n",Nstar);
   for(i = 0; i < Nstar; i++) {
     for(j = 0; j < 3 ; j++){
       pstar[i].r[j+1] = pstar[i].r[j+1] + si->deltapos[j];
@@ -1277,11 +1305,13 @@ void displace(SI *si,PARTICLE *bh){
   }
 
   if (bh->mass > 0) {
+  fprintf(stderr,"\b\b...Done\nDisplacing BH particles\n");
     for(j = 0; j< 3 ; j++){
       bh->r[j+1] += si->deltapos[j];
       bh->v[j+1] = bh->v[j+1]*velConvert + si->deltavel[j];
     }
   }
+  fprintf(stderr,"\b\b...Done\n");
 }
 
 /*

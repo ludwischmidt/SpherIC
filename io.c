@@ -482,7 +482,7 @@ void write_gadget(FILE *fp, const PARTICLE *bh, const SI *si){
  */
 void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
 
-  int i, j, Ndark,Nstar,Nbh;
+  int i, j, Ndark,Nstar,Nbh,DMIND,STIND,NUIND;
   PARTICLE *p;
   PARTICLE *pstar;
   GH gh;
@@ -525,9 +525,15 @@ void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
   if (si->starabg_flag == 1) {
     strcpy(DMPART,"/PartType2");
     strcpy(STPART,"/PartType1");
+    DMIND = 2;
+    STIND = 1;
+    NUIND = 4;
   } else {
     strcpy(DMPART,"/PartType1");
     strcpy(STPART,"/PartType4");
+    DMIND = 1;
+    STIND = 4;
+    NUIND = 2;
   }
 
   /*
@@ -535,22 +541,22 @@ void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
   ** backwards compatability.
   */
   gh.npart[0] = 0;
-  gh.npart[1] = Ndark;
-  gh.npart[2] = 0;
+  gh.npart[DMIND] = Ndark;
+  gh.npart[NUIND] = 0;
   gh.npart[3] = 0;
-  gh.npart[4] = Nstar;
+  gh.npart[STIND] = Nstar;
   gh.npart[5] = Nbh;
   gh.mass[0] = 0;
-  gh.mass[1] = si->mass;
-  gh.mass[2] = 0;
+  gh.mass[DMIND] = si->mass;
+  gh.mass[NUIND] = 0;
   gh.mass[3] = 0;
-  gh.mass[4] = si->massStar;
+  gh.mass[STIND] = si->massStar;
   gh.mass[5] = bh->mass;
   gh.npartTotal[0] = 0;
-  gh.npartTotal[1] = Ndark;
-  gh.npartTotal[2] = 0;
+  gh.npartTotal[DMIND] = Ndark;
+  gh.npartTotal[NUIND] = 0;
   gh.npartTotal[3] = 0;
-  gh.npartTotal[4] = Nstar;
+  gh.npartTotal[STIND] = Nstar;
   gh.npartTotal[5] = Nbh;
   for (i = 0; i < 6; i++) {
     gh.npartTotalHighWord[i] = 0;
@@ -628,7 +634,7 @@ void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
   fprintf(stderr,"saved.\nSaving masses....");
   // do masses - can reuse adrk
   for(i=0;i<Ndark;i++){
-    adrk[i] = gh.mass[1];
+    adrk[i] = gh.mass[DMIND];
   }
   snprintf(field, sizeof(field), "%s%s", DMPART, "/Masses");
   status = H5LTmake_dataset(file_id, field, 1, dims,
@@ -688,7 +694,7 @@ void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
     fprintf(stderr,"saved.\nSaving masses....");
     // do masses - can reuse adrk
     for(i=0;i<Nstar;i++){
-      astr[i] = gh.mass[4];
+      astr[i] = gh.mass[STIND];
     }
     snprintf(field, sizeof(field), "%s%s", STPART, "/Masses");
     status = H5LTmake_dataset(file_id, field, 1, dims,
