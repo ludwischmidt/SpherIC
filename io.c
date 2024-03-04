@@ -522,19 +522,22 @@ void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
   ** stellar distribution. PartType5 is always BHs
   */
   strcpy(BHPART,"/PartType5");
-  if (si->starabg_flag == 1) {
-    strcpy(DMPART,"/PartType2");
-    strcpy(STPART,"/PartType1");
-    DMIND = 2;
-    STIND = 1;
-    NUIND = 4;
-  } else {
+  // For a still unknown reason, the spheric-gizmo pipeline has a _lot_ of 
+  // trouble with putting the HR particles as PartType1 and LR particles as
+  // PartType2. So we'll leave things as originally designed
+  //if (si->starabg_flag == 1) {
+  //  strcpy(DMPART,"/PartType2");
+  //  strcpy(STPART,"/PartType1");
+  //  DMIND = 2;
+  //  STIND = 1;
+  //  NUIND = 4;
+  //} else {
     strcpy(DMPART,"/PartType1");
     strcpy(STPART,"/PartType4");
     DMIND = 1;
     STIND = 4;
     NUIND = 2;
-  }
+  //}
 
   /*
   ** Initialise header - we can reuse most of this since GIZMO expects
@@ -582,7 +585,7 @@ void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
   hid_t file_id, grp;
   /* create a HDF5 file */
   file_id = H5Fcreate(fname, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
-  // Only need to create groups for PartType1, PartType4, and PartType5
+  // Only need to create groups for PartType1, PartType2/PartType4, and PartType5
   herr_t status;
 
 
