@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.16.1
 #   kernelspec:
 #     display_name: darknanograv
 #     language: python
@@ -144,7 +144,7 @@ def latex_float(f):
 # %% [markdown]
 # ## SpherIC
 
-# %% [markdown] jp-MarkdownHeadingCollapsed=true
+# %% [markdown]
 # ### Options class
 
 # %%
@@ -1864,7 +1864,7 @@ ax.loglog(r,rho_fun((r.to('kpc')).v).to('Msun/Mpc**3'),label='ρ combined')
 ax.legend()
 
 Mstar_calc,calc_err = integrate.quad(mass_enc,0*0.001e-3,1) # 0-1 kpc 
-print(f'{Mstar_calc/(1e10)=} with error {calc_err/1e10} (expected {Mstar/(1e10*Msun)})')
+print(f'{Mstar_calc/(Mhalo)=} with error {calc_err/Mhalo} (expected {Mstar/(Mhalo)})')
 
 mass_enc_res = [integrate.quad(mass_enc,0,ro.v) for ro in r.to('kpc')]
 me = [m for m,_ in mass_enc_res]
@@ -1876,6 +1876,8 @@ ax2.set_ylabel(f'# of particles')
 
 # %% [markdown]
 # Above results suggest we need ~$2\times10^{5}$ high res particles, $M_{star} = M_{halo}/1000$, $α = 1$, $β = 4$ (a finite mass model), $γ = 1$ (to match NFW), $rs = 80$ pc, and $rcuts = 1e3$ kpc
+#
+# **Update 03/04** Upping number of hires particles to $10^5$, $10^6$ to see if this helps with spike collapse. 
 
 # %%
 from pathlib import Path
@@ -1884,20 +1886,29 @@ so_noBH = SphericOptions(MBH=0,dx=0,dy=0,name=f"{folder}/IC-twosideA-noBH",Nhalo
                     Nstar=2e5,Mstar=1e-3,star_alpha=1,star_beta=4,star_gamma=2,star_rs=80/1e3,star_rcutoff=1e2,ogh=True)
 so_wiBH = SphericOptions(MBH=1e-3,dx=0,dy=0,name=f"{folder}/IC-twosideA-wiBH",Nhalo=1e4,starabg=True,
                     Nstar=2e5,Mstar=1e-3,star_alpha=1,star_beta=4,star_gamma=2,star_rs=80/1e3,star_rcutoff=1e2,ogh=True)
+so_hern = SphericOptions(MBH=1e-3,dx=0,dy=0,name=f"{folder}/IC-twosideA-hern",Nhalo=1e4,hernquist=True,
+                    Nstar=2e5,Mstar=1e-3,rhern=0.08,ogh=True)
+so_habg = SphericOptions(MBH=1e-3,dx=0,dy=0,name=f"{folder}/IC-twosideA-habg",Nhalo=1e4,starabg=True,
+                    Nstar=2e5,Mstar=1e-3,star_alpha=1,star_beta=4,star_gamma=1,star_rs=80/1e3,star_rcutoff=1e2,ogh=True)
+so_s5BH = SphericOptions(MBH=1e-3,dx=0,dy=0,name=f"{folder}/IC-twosideA-s5BH",Nhalo=2e5,starabg=True,
+                    Nstar=2e5,Mstar=1e-3,star_alpha=1,star_beta=4,star_gamma=2,star_rs=80/1e3,star_rcutoff=1e2,ogh=True)
+so_s6BH = SphericOptions(MBH=1e-3,dx=0,dy=0,name=f"{folder}/IC-twosideA-s6BH",Nhalo=2e6,starabg=True,
+                    Nstar=2e5,Mstar=1e-3,star_alpha=1,star_beta=4,star_gamma=2,star_rs=80/1e3,star_rcutoff=1e2,ogh=True)
 #so2 = SphericOptions(MBH=.5e-3,dx=50,dy=-10,dvx=-10,name=f"{folder}/IC-twosideB",Nhalo=1e5,ogh=True)
 print(f"Using for halo w/o BH: {so_noBH.generateOptionString()}")
 print(f"Using for halo w/  BH: {so_wiBH.generateOptionString()}")
+print(f"Using for hern: {so_hern.generateOptionString()}")
+print(f"Using for hern ABG: {so_habg.generateOptionString()}")
+print(f"Using for 10^5 Halo particles: {so_s5BH.generateOptionString()}")
+print(f"Using for 10^6 Halo particles: {so_s6BH.generateOptionString()}")
 #print(f"Using for halo 2: {so2.generateOptionString()}")
 #print('Not currently working. Try from commandline instead')
 #exit()
-comproc = spheric(so_noBH)
-# Note if this errors/is blank, spheric probably segfaulted
-print(comproc.stdout.decode()) 
-print(comproc.stderr.decode())
-comproc = spheric(so_wiBH)
-# Note if this errors/is blank, spheric probably segfaulted
-print(comproc.stdout.decode()) 
-print(comproc.stderr.decode())
+for so in [so_noBH,so_wiBH,so_hern,so_habg,so_s5BH,so_s6BH]:
+    comproc = spheric(so)
+    # Note if this errors/is blank, spheric probably segfaulted
+    print(comproc.stdout.decode()) 
+    print(comproc.stderr.decode())
 #comproc = spheric(so2)
 # Note if this errors/is blank, spheric probably segfaulted
 #print(comproc.stdout.decode()) 
@@ -1907,25 +1918,30 @@ print(comproc.stderr.decode())
 import yt
 
 yt.set_log_level('warning')
-ds = yt.load('../../runs/spike_test_nBH/IC-twosideA-noBH-gizmo.hdf5',bounding_box=[[-600,600]]*3)
+#ds = yt.load('../../runs/spike_test_nBH/IC-twosideA-noBH-gizmo.hdf5',bounding_box=[[-600,600]]*3)
+ds = yt.load('runs/IC-twosideA-habg-gizmo.hdf5',bounding_box=[[-600,600]]*3)
 
-plot = yt.ParticleProjectionPlot(ds,'z',origin='native',width=(.5,'kpc'),window_size=(10,3))
+ad = ds.all_data()
+hrpt = 'PartType1' if 'PartType2' in ds.particle_types else 'PartType4'
+lrpt = 'PartType2' if 'PartType2' in ds.particle_types else 'PartType1'
+
+plot = yt.ParticleProjectionPlot(ds,'z',(hrpt,'particle_ones'),origin='native',width=(.5,'kpc'),window_size=(10,3))
 if ('PartType5','Coordinates') in ds.field_list:
     plot.annotate_particles(20,ptype="PartType5",col="orange",p_size=10,alpha=0.75)
-if ('PartType2','Coordinates') in ds.field_list:
-    plot.annotate_particles(20,ptype='PartType2',col='red',p_size=10,alpha=0.5)
+if (lrpt,'Coordinates') in ds.field_list:
+    plot.annotate_particles(20,ptype=lrpt,col='red',p_size=10,alpha=0.5)
 #plot.show()
 
 #fig=plt.figure(figsize=(4,4))
 fig = plot.export_to_mpl_figure((1,1))
 ax1 = fig.add_subplot(122)
-rhohr,(prof,npart) = rho_prof(ds=ds,radius=(500,'kpc'),stretch='nan')
+rhohr,(prof,npart) = rho_prof(ds=ds,radius=(500,'kpc'),stretch='nan',pt=hrpt)
 rhohr = rhohr.to("code_mass/kpc**3")
 r = prof.x.to("kpc")
 ax1.loglog(r,rhohr,'.-',label=f"Hi-res DM")
 rho_αβγ130 = get_αβγ_prof(r.v,)
 rho_αβγNFW = get_αβγ_prof(r.v,γ=0)
-rholr,(prof,npart) = rho_prof(ds=ds,radius=(500,'kpc'),stretch='nan',pt='PartType2')
+rholr,(prof,npart) = rho_prof(ds=ds,radius=(500,'kpc'),stretch='nan',pt=lrpt)
 rholr = rholr.to("code_mass/kpc**3")
 rlr = prof.x.to("kpc")
 ax1.loglog(rlr,rholr,'.-',label=f"Lo-res DM")
