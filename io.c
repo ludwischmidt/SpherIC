@@ -482,10 +482,12 @@ void write_gadget(FILE *fp, const PARTICLE *bh, const SI *si){
  */
 void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
 
-  int i, j, Ndark,Nstar,Nbh;
+  int i, j, Ndark,Nstar,Nbh,DMIND,STIND,NUIND;
   PARTICLE *p;
   PARTICLE *pstar;
   GH gh;
+  char DMPART[10+1], STPART[10+1], BHPART[10+1];
+  char field[30];
 
   // Dark and star particle arrays
   p = si->p;
@@ -511,26 +513,53 @@ void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
   }
 
   /*
+  ** In the future, we should add a flag to specify that we want to switch 
+  ** particle types, or even some sort of mapping. For now we will assume
+  ** that if -starabg is given, then PartType1 represents high resolution
+  ** inner particles (aka the star distribution) and PartType2 represents
+  ** low-resolution outer particles (aka the DM distribution). Otherwise,
+  ** PartType1 represents the DM distribution and PartType4 represents the
+  ** stellar distribution. PartType5 is always BHs
+  */
+  strcpy(BHPART,"/PartType5");
+  // For a still unknown reason, the spheric-gizmo pipeline has a _lot_ of 
+  // trouble with putting the HR particles as PartType1 and LR particles as
+  // PartType2. So we'll leave things as originally designed
+  //if (si->starabg_flag == 1) {
+  //  strcpy(DMPART,"/PartType2");
+  //  strcpy(STPART,"/PartType1");
+  //  DMIND = 2;
+  //  STIND = 1;
+  //  NUIND = 4;
+  //} else {
+    strcpy(DMPART,"/PartType1");
+    strcpy(STPART,"/PartType4");
+    DMIND = 1;
+    STIND = 4;
+    NUIND = 2;
+  //}
+
+  /*
   ** Initialise header - we can reuse most of this since GIZMO expects
   ** backwards compatability.
   */
   gh.npart[0] = 0;
-  gh.npart[1] = Ndark;
-  gh.npart[2] = 0;
+  gh.npart[DMIND] = Ndark;
+  gh.npart[NUIND] = 0;
   gh.npart[3] = 0;
-  gh.npart[4] = Nstar;
+  gh.npart[STIND] = Nstar;
   gh.npart[5] = Nbh;
   gh.mass[0] = 0;
-  gh.mass[1] = si->mass;
-  gh.mass[2] = 0;
+  gh.mass[DMIND] = si->mass;
+  gh.mass[NUIND] = 0;
   gh.mass[3] = 0;
-  gh.mass[4] = si->massStar;
+  gh.mass[STIND] = si->massStar;
   gh.mass[5] = bh->mass;
   gh.npartTotal[0] = 0;
-  gh.npartTotal[1] = Ndark;
-  gh.npartTotal[2] = 0;
+  gh.npartTotal[DMIND] = Ndark;
+  gh.npartTotal[NUIND] = 0;
   gh.npartTotal[3] = 0;
-  gh.npartTotal[4] = Nstar;
+  gh.npartTotal[STIND] = Nstar;
   gh.npartTotal[5] = Nbh;
   for (i = 0; i < 6; i++) {
     gh.npartTotalHighWord[i] = 0;
@@ -556,13 +585,13 @@ void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
   hid_t file_id, grp;
   /* create a HDF5 file */
   file_id = H5Fcreate(fname, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
-  // Only need to create groups for PartType1, PartType4, and PartType5
+  // Only need to create groups for PartType1, PartType2/PartType4, and PartType5
   herr_t status;
 
 
   ////////  Do dark particles
   fprintf(stderr,"Saving dark particles\nCreating and closing group....");
-  grp = H5Gcreate(file_id, "/PartType1", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+  grp = H5Gcreate(file_id, DMPART, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
   status = H5Gclose(grp);
   fprintf(stderr,"closed.\nCreating particles....");
   assert(status >= 0);
@@ -576,9 +605,10 @@ void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
     }
   }
 
-  /* create and write a double type dataset named "/PartType1/Coordinates" */
+  /* create and write a double type dataset named "DMPART/Coordinates" */
   fprintf(stderr,"created.\nSaving coordinates dataset....");
-  status = H5LTmake_dataset(file_id, "/PartType1/Coordinates", 2, dims,
+  snprintf(field, sizeof(field), "%s%s", DMPART, "/Coordinates");
+  status = H5LTmake_dataset(file_id, field , 2, dims,
                             H5T_NATIVE_DOUBLE, ddrk);
   assert(status != -1);
   fprintf(stderr,"saved.\nSaving velocities dataset....");
@@ -588,7 +618,8 @@ void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
       ddrk[i*3 + j] = p[i].v[j+1];
     }
   }
-  status = H5LTmake_dataset(file_id, "/PartType1/Velocities", 2, dims,
+  snprintf(field, sizeof(field), "%s%s", DMPART, "/Velocities");
+  status = H5LTmake_dataset(file_id, field , 2, dims,
                             H5T_NATIVE_DOUBLE, ddrk);
   assert(status != -1);
   free(ddrk);
@@ -599,15 +630,17 @@ void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
   for(i=0;i<Ndark;i++){
     adrk[i] = p[i].index;
   }
-  status = H5LTmake_dataset(file_id, "/PartType1/ParticleIDs", 1, dims,
+  snprintf(field, sizeof(field), "%s%s", DMPART, "/ParticleIDs");
+  status = H5LTmake_dataset(file_id, field , 1, dims,
                             H5T_NATIVE_DOUBLE, adrk);
   assert(status != -1);
   fprintf(stderr,"saved.\nSaving masses....");
   // do masses - can reuse adrk
   for(i=0;i<Ndark;i++){
-    adrk[i] = gh.mass[1];
+    adrk[i] = gh.mass[DMIND];
   }
-  status = H5LTmake_dataset(file_id, "/PartType1/Masses", 1, dims,
+  snprintf(field, sizeof(field), "%s%s", DMPART, "/Masses");
+  status = H5LTmake_dataset(file_id, field, 1, dims,
                             H5T_NATIVE_DOUBLE, adrk);
   assert(status != -1);
   free(adrk);
@@ -617,7 +650,7 @@ void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
 
   if(Nstar > 0){
     fprintf(stderr,"Saving star particles\nCreating and closing group....");
-    grp = H5Gcreate(file_id, "/PartType4", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    grp = H5Gcreate(file_id, STPART, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     status = H5Gclose(grp);
     assert(status >= 0);
     fprintf(stderr,"closed.\nCreating particles....");
@@ -633,8 +666,9 @@ void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
     }
 
     fprintf(stderr,"created.\nSaving coordinates dataset....");
-    /* create and write a double type dataset named "/PartType4/Coordinates" */
-    status = H5LTmake_dataset(file_id, "/PartType4/Coordinates", 2, dims,
+    /* create and write a double type dataset named "STPART/Coordinates" */
+    snprintf(field, sizeof(field), "%s%s", STPART, "/Coordinates");
+    status = H5LTmake_dataset(file_id, field, 2, dims,
                             H5T_NATIVE_DOUBLE, dstr);
     assert(status != -1);
     fprintf(stderr,"saved.\nSaving velocities dataset....");
@@ -644,7 +678,8 @@ void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
         dstr[i*3 + j] = pstar[i].v[j+1];
       }
     }
-    status = H5LTmake_dataset(file_id, "/PartType4/Velocities", 2, dims,
+    snprintf(field, sizeof(field), "%s%s", STPART, "/Velocities");
+    status = H5LTmake_dataset(file_id, field, 2, dims,
                               H5T_NATIVE_DOUBLE, dstr);
     assert(status != -1);
     free(dstr);
@@ -655,15 +690,17 @@ void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
     for(i=0;i<Nstar;i++){
       astr[i] = pstar[i].index;
     }
-    status = H5LTmake_dataset(file_id, "/PartType4/ParticleIDs", 1, dims,
+    snprintf(field, sizeof(field), "%s%s", STPART, "/ParticleIDs");
+    status = H5LTmake_dataset(file_id, field, 1, dims,
                               H5T_NATIVE_DOUBLE, astr);
     assert(status != -1);
     fprintf(stderr,"saved.\nSaving masses....");
     // do masses - can reuse adrk
     for(i=0;i<Nstar;i++){
-      astr[i] = gh.mass[4];
+      astr[i] = gh.mass[STIND];
     }
-    status = H5LTmake_dataset(file_id, "/PartType4/Masses", 1, dims,
+    snprintf(field, sizeof(field), "%s%s", STPART, "/Masses");
+    status = H5LTmake_dataset(file_id, field, 1, dims,
                               H5T_NATIVE_DOUBLE, astr);
     assert(status != -1);
     free(astr);
@@ -673,7 +710,7 @@ void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
   /////// Do black holes
   if(Nbh > 0){
     fprintf(stderr,"Saving BH particles\nCreating and closing group....");
-    grp = H5Gcreate(file_id, "/PartType5", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    grp = H5Gcreate(file_id, BHPART, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     status = H5Gclose(grp);
     fprintf(stderr,"closed.\nCreating particles....");
     assert(status >= 0);
@@ -689,7 +726,8 @@ void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
     }
     fprintf(stderr,"created.\nSaving coordinates dataset....");
     /* create and write a double type dataset named "/PartType5/Coordinates" */
-    status = H5LTmake_dataset(file_id, "/PartType5/Coordinates", 2, dims,
+    snprintf(field, sizeof(field), "%s%s", BHPART, "/Coordinates");
+    status = H5LTmake_dataset(file_id, field, 2, dims,
                             H5T_NATIVE_DOUBLE, dbh);
     assert(status != -1);
     fprintf(stderr,"saved.\nSaving velocities dataset....");
@@ -699,7 +737,8 @@ void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
         dbh[i][j] = bh->v[j+1];
       }
     }
-    status = H5LTmake_dataset(file_id, "/PartType5/Velocities", 2, dims,
+    snprintf(field, sizeof(field), "%s%s", BHPART, "/Velocities");
+    status = H5LTmake_dataset(file_id, field, 2, dims,
                             H5T_NATIVE_DOUBLE, dbh);
     assert(status != -1);
     fprintf(stderr,"saved.\nSaving particle ids....");
@@ -709,7 +748,8 @@ void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
     for(i=0;i<Nbh;i++){
       abh[i] = i + Ndark + Nstar + 1;
     }
-    status = H5LTmake_dataset(file_id, "/PartType5/ParticleIDs", 1, dims,
+    snprintf(field, sizeof(field), "%s%s", BHPART, "/ParticleIDs");
+    status = H5LTmake_dataset(file_id, field, 1, dims,
                             H5T_NATIVE_DOUBLE, abh);
     assert(status != -1);
     fprintf(stderr,"saved.\nSaving masses....");
@@ -717,7 +757,8 @@ void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
     for(i=0;i<Nbh;i++){
       abh[i] = bh->mass;
     }
-    status = H5LTmake_dataset(file_id, "/PartType5/Masses", 1, dims,
+    snprintf(field, sizeof(field), "%s%s", BHPART, "/Masses");
+    status = H5LTmake_dataset(file_id, field, 1, dims,
                             H5T_NATIVE_DOUBLE, abh);
     assert(status != -1);
     fprintf(stderr,"saved.\n");

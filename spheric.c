@@ -51,6 +51,8 @@ int main(int argc, char **argv) {
   assert(si != NULL);
   si->sp = malloc(sizeof(SP));
   assert(si->sp != NULL);
+  si->starsp = malloc(sizeof(SP));
+  assert(si->starsp != NULL);
   si->griddf = malloc(sizeof(GRIDDF));
   assert(si->griddf != NULL);
   si->stuff = malloc(sizeof(STUFF));
@@ -113,6 +115,11 @@ int main(int argc, char **argv) {
       si->stars_flag = 1;
       i++;
     }	
+    else if (strcmp(argv[i],"-starabg") == 0) {
+      si->starabg_flag = 1;
+      si->stars_flag = 1;
+      i++;
+    }
     else if (strcmp(argv[i],"-nostarpot") == 0) {
       si->nostarpot_flag = 1;
       i++;
@@ -236,7 +243,49 @@ int main(int argc, char **argv) {
       si->sp->rp = atof(argv[i]);
       i++;
     }
-
+    /*
+    ** StarABG parameters
+    */
+    else if (strcmp(argv[i],"-as") == 0) {
+      i++;
+      if (i >= argc) {
+	usage();
+      }
+      si->starsp->alpha = atof(argv[i]);
+      i++;
+    }
+    else if (strcmp(argv[i],"-bs") == 0) {
+      i++;
+      if (i >= argc) {
+	usage();
+      }
+      si->starsp->beta = atof(argv[i]);
+      i++;
+    }
+    else if (strcmp(argv[i],"-cs") == 0) {
+      i++;
+      if (i >= argc) {
+	usage();
+      }
+      si->starsp->gamma = atof(argv[i]);
+      i++;
+    }
+    else if (strcmp(argv[i],"-rss") == 0) {
+      i++;
+      if (i >= argc) {
+	usage();
+      }
+      si->starsp->rs = atof(argv[i]);
+      i++;
+    }
+    else if (strcmp(argv[i],"-rcuts") == 0) {
+      i++;
+      if (i >= argc) {
+	usage();
+      }
+      si->starsp->rcutoff = atof(argv[i]);
+      i++;
+    }
     /*
     ** Black hole parameters
     */
@@ -394,6 +443,11 @@ int main(int argc, char **argv) {
     fprintf(stderr,"These numbers have to fulfill the condition (NGRIDR-1) mod (NGRIDDF-1) == 0.\n");
     usage();
   } 
+
+  if ((si->starabg_flag == 1) && (output_gizmo_hdf5 != 1)) {
+    fprintf(stderr,"The -starabg flag is only intended for use with GIZMO output (-ogh)\n");
+    usage();
+  }
 		
   check_main_parameters(si);
 
