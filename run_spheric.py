@@ -194,8 +194,11 @@ def combineICs(ic1name,ic2name,outname):
     pass
 
 
-# %% [markdown] jp-MarkdownHeadingCollapsed=true
-# ## Density profiles
+# %% [markdown]
+# ## Profiles
+
+# %% [markdown]
+# ### density
 
 # %%
 import yt
@@ -268,17 +271,20 @@ def rho_prof(*,ds=None,radius=None,center=None,sphere=None,
         sphere = get_sphere(ds,radius,center=center)
     rhofield = (pt,"density")
     numfield = (pt,"particle_ones") 
+    rfield = (pt, "particle_radius")
     wfield = numfield
     volume_normal = False
     if rhofield not in sphere.ds.field_list:
-        print(f'{rhofield} not in sphere.ds.field_list. Using ({pt},"Masses") instead.')
+        #print(f'{rhofield} not in sphere.ds.field_list. Using ({pt},"Masses") instead.')
         rhofield = (pt,"Masses")
         volume_normal = True
         wfield = None
     #wfield = (pt,"Masses")
+    if not isinstance(override_bins,dict):
+        override_bins = {rfield:override_bins}
     prof = yt.create_profile(
             sphere,
-            [(pt, "particle_radius")],
+            [rfield],
             fields=[rhofield],
             weight_field=wfield,
             deposition='ngb',
@@ -287,7 +293,7 @@ def rho_prof(*,ds=None,radius=None,center=None,sphere=None,
         )
     numprof = yt.create_profile(
             sphere,
-            [(pt, "particle_radius")],
+            [rfield],
             fields=[numfield],
             weight_field=None,
             accumulation=True,
@@ -322,9 +328,310 @@ def rho_prof(*,ds=None,radius=None,center=None,sphere=None,
 
 
 # %% [markdown] jp-MarkdownHeadingCollapsed=true
-# ## Various plotting commands
+# ### velocity
+
+# %%
+# This should be very similar to the dens_prof function
+def vel_prof(*,ds=None,radius=None,center=None,sphere=None,
+             pt=pt1,override_bins=None,stretch=True):
+    if sphere is None  and (ds is None or radius is None):
+        raise Exception("Need to provide ds and radius or sphere")
+    if sphere is None:
+        sphere = get_sphere(ds,radius,center=center)
+    bulk_velocity = sphere.quantities.bulk_velocity(use_gas=False,use_particles=True)
+    sphere.set_field_parameter('bulk_velocity',bulk_velocity)
+    field = (pt,"particle_velocity_spherical_radius")
+    numfield = (pt,"particle_ones") 
+    wfield = numfield
+    prof = yt.create_profile(
+            sphere,
+            [(pt, "particle_radius")],
+            fields=[field],
+            weight_field=wfield,
+            deposition='ngb',
+            accumulation=False,
+            override_bins=override_bins,
+        )
+    numprof = yt.create_profile(
+            sphere,
+            [(pt, "particle_radius")],
+            fields=[numfield],
+            weight_field=None,
+            accumulation=True,
+            override_bins=override_bins,
+        )
+    vel = prof[field]
+    npart = numprof[numfield]
+    r = prof.x.to("pc")
+    if stretch:
+        # Depending on the particle spacing/resolution, some bins won't
+        # have particles and thus n, T, and mu would be 0. In those cases
+        # copy the value from the first non-zero inner bin 
+        for i,ni in enumerate(npart):
+            if stretch=='nan':
+                if vel[i]<=0:
+                    vel[i] = np.nan
+            elif stretch=='skip':
+                continue
+            else:
+                if i==0 or ni>npart[i-1]:
+                    continue
+                vel[i] = vel[i-1]
+        #if stretch=='skip':
+            # need to remove bins with no particles
+    return vel,(prof,npart)
+
 
 # %% [markdown]
+# ### shells
+
+# %%
+class Shell:
+    inner=None
+    outer=None
+    ri=0
+    ro=0
+    dd=None
+    def __init__(self,*,ds=None,inner=None,outer=None,ri=0,ro=None):
+        if ds is None and outer is None:
+            raise TypeError('Must provide one of (ds,r1=0,r2) or (outer)')
+        if ds is not None and ro is None:
+            raise TypeError('If ds is specified, must provided at least ro')
+        
+        if ds is not None:
+            center = [0,0,0]
+            if not hasattr(ds,'sphere'):
+                if not hasattr(ds,'ds'):
+                    raise TypeError(f'ds (type:{type(ds)} has no way to get a subsphere')
+                center = ds.center
+                ds = ds.ds
+            outer = ds.sphere(radius=ro,center=center)
+            if ri>0:
+                inner = ds.sphere(radius=ri,center=center)
+        
+        if inner is None:
+            dd = outer
+        else:
+            dd = outer-inner
+        self.inner = inner
+        self.outer = outer
+        self.ri = 0*outer.radius if inner is None else inner.radius
+        self.ro = outer.radius
+        self.dd = dd
+        
+    def numparts(self,pt='all'):
+        return self.dd.quantities.total_quantity((pt,'particle_ones'))
+
+def get_shells(*,ds=None,radius=None,center=None,sphere=None,
+             pt='all',override_bins=None,stretch="merge"):
+    if sphere is None  and (ds is None or radius is None):
+        raise Exception("Need to provide ds and radius or sphere")
+    if sphere is None:
+        sphere = get_sphere(ds,radius,center=center)
+    numfield = (pt,"particle_ones") 
+    rfield = (pt, "particle_radius")
+    wfield = numfield
+    if not isinstance(override_bins,dict):
+        override_bins = {rfield:override_bins}
+    numprof = yt.create_profile(
+            sphere,
+            [rfield],
+            fields=[numfield],
+            weight_field=None,
+            accumulation=False,
+            override_bins=override_bins,
+            logs={rfield:True},
+        )
+    npart = numprof[numfield]
+    r = numprof.x.to("pc")
+    # Depending on the particle spacing/resolution, some bins won't
+    # have particles. How we deal with them depends on stretch. We'll
+    # default to leaving the bins in -note that this might result in 
+    # empty shells. Alternatively we can merge adjacent empty shells
+    # together or remove them from the list
+    bins = np.hstack((unyt_array([0*r.units,*r[:-1]]),r)).T
+    bin_mask = [np>0 for np in npart]
+    if stretch=="merge":
+        bins = bins[bin_mask]
+        for i,b in enumerate(bins):
+            if i<len(bins)-1 and b[1]<bins[i+1][0]:
+                bins[i][1]=bins[i+1][0]
+    elif stretch=='skip':
+        print(f'Skipping {len(bin_mask)-sum(bin_mask)}-particle bins')
+        bins = bins[bin_mask]
+    #spheres = [sphere.ds.sphere(radius=b[1],center=sphere.center) for b in bins]
+    #shells = [s-spheres[i-1] if i>0 else s for i,s in enumerate(spheres) ]
+    shells = [Shell(ds=sphere,ri=b[0],ro=b[1]) for b in bins]
+    return shells
+
+def get_shell_bins(shells):
+    bins = unyt_array([shells[0].ri,*(s.ro for s in shells)]).to('pc')
+    return bins
+
+def plot_num_particles(shells,*,ax=None,**kwargs):
+    if ax is None:
+        fig=plt.figure();
+        ax=fig.add_subplot();
+    if shells is None:
+        shells = get_shells(**kwargs)
+    bins = get_shell_bins(shells)
+    hr = 'PartType4' if 'PartType4' in shells[0].dd.ds.particle_types else 'PartType1'
+    lr = 'PartType1' if 'PartType4' in shells[0].dd.ds.particle_types else 'PartType2'
+    nhr = [s.numparts(pt=hr) for s in shells]
+    nlr = [s.numparts(pt=lr) for s in shells]
+    hrline = ax.stairs(nhr,edges=bins,label='HR',lw=2);
+    lrline = ax.stairs(nlr,edges=bins,label='LR',edgecolor=hrline.get_edgecolor(),
+              facecolor=hrline.get_facecolor(),lw=1);
+    ax.set_xscale('symlog',linthresh=1e-2)
+    ax.set_yscale('symlog')
+    ax.set_xlabel(f'r ({bins.units})')
+    ax.set_ylabel('# Particles')
+    ax.legend()
+    return hrline,lrline
+
+
+# %% [markdown]
+# ### dispersion
+
+# %%
+def dispersion(shells=None,*,pt='all',p=2,**kwargs):
+    if shells is None:
+        shells = get_shells(**kwargs)
+    vrfield = (pt,'particle_velocity_spherical_radius')
+    #s20 = shells[0].std(vrfield)
+    #s2 = np.zeros(len(shells)) * s2.units
+    #for i,s in enumerate(shells):
+    #    s2[i] = s.quantites.std(vrfield)
+    s2 = unyt_array([s.dd.std(vrfield)**p for s in shells]).to(f'km**{p}/s**{p}')
+    return s2
+
+def plot_dispersion(shells,*,ax=None,p=2,**kwargs):
+    if ax is None:
+        fig=plt.figure();
+        ax=fig.add_subplot();
+    if shells is None:
+        shells = get_shells(**kwargs)
+    bins = get_shell_bins(shells)
+    hr = 'PartType4' if 'PartType4' in shells[0].dd.ds.particle_types else 'PartType1'
+    lr = 'PartType1' if 'PartType4' in shells[0].dd.ds.particle_types else 'PartType2'
+    s2hr = dispersion(shells,pt=hr,p=p)
+    s2lr = dispersion(shells,pt=lr,p=p)
+    hrline = ax.stairs(s2hr,edges=bins,label='HR',lw=2);
+    lrline = ax.stairs(s2lr,edges=bins,label='LR',edgecolor=hrline.get_edgecolor(),
+              facecolor=hrline.get_facecolor(),lw=1);
+    ax.set_xscale('symlog',linthresh=1e-2)
+    ax.set_yscale('symlog')
+    ax.set_xlabel(f'r ({bins.units})')
+    ax.set_ylabel(r'$\sigma^'f'{p}'r'$ (km$^'f'{p}'r'$/s$^'f'{p}'r'$)')
+    ax.legend()
+    return hrline,lrline
+
+
+# %% [markdown]
+# ## Mean free path
+# Defined as 
+#
+# $$ l = \frac{1}{n  \sigma v} = (\rho  \frac{\sigma}{m}  v)^{-1} $$
+#
+# Since we don't have local versions of $n/\rho$, we need to use the profiles
+#
+# So this will be the average mean free path in spherical shell
+
+# %%
+from yt.units import centimeter as cm
+from yt.units import gram as g
+def _relative_particle_speed(field, data, ftype,  ):
+    return np.sqrt(np.sum(data[ftype,"relative_particle_velocity"]**2,axis=1))
+
+from functools import partial
+def add_particle_speed(ds,ftype="PartType1",force_override=False):
+    ds.add_field(
+        (ftype, "relative_particle_speed"),
+        function=partial(_relative_particle_speed,ftype=ftype),
+        sampling_type="particle",
+        display_name=r"\bar{v}",
+        units='auto',
+        force_override=force_override,
+        validators=[ValidateDataField((ftype,"Velocities"))],
+    )
+
+from yt.fields.derived_field import ValidateDataField
+def mean_free_path(shells=None,*,sigma_over_m=None,pt='PartType4',**kwargs):
+    # first define the shells
+    if shells is None:
+        shells = get_shells(**kwargs)
+    if sigma_over_m is None:
+        sigma_over_m = lambda v:10*cm**2/g
+    vrfield = (pt,'relative_particle_speed')
+    #s20 = shells[0].std(vrfield)
+    #s2 = np.zeros(len(shells)) * s2.units
+    #for i,s in enumerate(shells):
+    #    s2[i] = s.quantites.std(vrfield)
+    if vrfield not in shells[0].dd.ds.derived_field_list:
+        add_particle_speed(shells[0].dd.ds,ftype=pt)
+    v = unyt_array([s.dd.mean(vrfield) for s in shells]).to(f'km/s')
+    bins = get_shell_bins(shells)
+    ρ,_ = rho_prof(override_bins=bins,pt=pt,**kwargs)
+    l = 1/(ρ*sigma_over_m(v))
+    return l, shells
+
+def plot_mean_free_path(*,ax=None,**kwargs):
+    if ax is None:
+        fig = plt.figure()
+        ax = fig.add_subplot()
+    lhr,shellshr = mean_free_path(**kwargs)
+    bins = get_shell_bins(shellshr)
+    hrline = ax.stairs(lhr,edges=bins,lw=2,label='HR')
+    llr,shellslr = mean_free_path(pt='PartType1',**kwargs)
+    bins = get_shell_bins(shellslr)
+    lrline = ax.stairs(llr,edges=bins,lw=1,label='LR',edgecolor=hrline.get_edgecolor(),
+                     facecolor=hrline.get_facecolor(),)
+    ax.set_xscale('symlog',linthresh=1e-1)
+    ax.set_yscale('symlog',linthresh=1e-4)
+    ax.set_xlabel(f'r ({bins.units})')
+    ax.set_ylabel(f'$l$ ({llr.units})')
+    ax.legend()
+    return hrline,lrline
+    
+
+
+# %% [markdown]
+# ### Relaxation time
+# $t_r = \frac{1}{\rho (\sigma/m) v} $
+
+# %%
+def relax_time(*,pt='PartType4',**kwargs):
+    l, shells = mean_free_path(**kwargs)
+    vrfield = (pt,'relative_particle_speed')
+    v = unyt_array([s.dd.mean(vrfield) for s in shells]).to(f'km/s')
+    tr = (l/v).to('Myr')
+    return tr, shells
+
+def plot_relax_time(*,ax=None,**kwargs):
+    if ax is None:
+        fig = plt.figure()
+        ax = fig.add_subplot()
+    vhr,shellshr = relax_time(**kwargs)
+    bins = get_shell_bins(shellshr)
+    hrline = ax.stairs(vhr,edges=bins,lw=2,label='HR')
+    vlr,shellslr = relax_time(pt='PartType1',**kwargs)
+    bins = get_shell_bins(shellslr)
+    lrline = ax.stairs(vlr,edges=bins,lw=1,label='LR',edgecolor=hrline.get_edgecolor(),
+                      facecolor=hrline.get_facecolor(),)
+    ax.set_xscale('symlog',linthresh=1e-1)
+    ax.set_yscale('symlog',)
+    ax.set_xlabel(f'r ({bins.units})')
+    ax.set_ylabel(f'$t_r$ ({vlr.units})')
+    ax.legend()
+    return hrline,lrline
+
+
+# %%
+
+# %% [markdown]
+# ## Various plotting commands
+
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ### Make animations
 # These are another set of fragile definitions, those in this case more because of how yt is implemented. `make_animation_from_images` should always work, but it won't create an animation that can be paused, rewound, etc. `make_animation_directly` will only work for plots that are based on SlicePlots and ProjectionPlots, it won't work on things like ParticlePhasePlots
 
@@ -400,12 +707,12 @@ def make_animation_directly(dss,plotcommand,save_filename:str = None):
 
 
 def load_animation_from_file(filename:str):
-    if "gif" in filename:
+    if "gif" in str(filename):
         return Image(filename=filename)
     return Video(filename=filename)
 
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ### Color varying line def
 
 # %%
@@ -453,7 +760,7 @@ def plot_color_varying_line(x,y,t,*,z=None,fig=None,ax=None,resize=True,label=No
     return line
 
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ### Plot Random Walk
 
 # %%
@@ -497,6 +804,58 @@ def plot_random_walk(x,y,t,*,inspos=[-0.2, -0.17, 0.15, 0.12]):
 
 
 # %% [markdown] jp-MarkdownHeadingCollapsed=true
+# ### Plot Single DS (similar to plotmerger or Simulation.plotds)
+
+# %%
+def plotds(ds,*,width=(300,'kpc'),**kwargs):
+    col_field = ("PartType1","Masses")
+    ad = ds.all_data() # make sure the data is loaded and particle fields are populated
+    hrpt = 'PartType1' if 'PartType2' in ds.particle_types else 'PartType4'
+    lrpt = 'PartType2' if 'PartType2' in ds.particle_types else 'PartType1'
+    plot = yt.ParticleProjectionPlot(ds,"z",(hrpt,'particle_ones'),col_field,width=width,window_size=(3,3),origin='native',**kwargs)
+    if ('PartType5','Coordinates') in ds.field_list:
+        plot.annotate_particles(20,ptype="PartType5",col="orange",p_size=10,alpha=0.75)
+    if (lrpt,'Coordinates') in ds.field_list:
+        plot.annotate_particles(20,ptype=lrpt,col='red',p_size=10,alpha=0.1)
+    plot.annotate_timestamp(time_unit="Myr",draw_inset_box=True)
+    return plot,col_field,None
+
+
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
+# ### Plot single ds density profile (like Simulation.prof_ds)
+
+# %%
+def prof_ds(ds,*,ax=None,**kwargs):
+    if ax is None:
+        fig = plt.figure(**kwargs)
+        ax = fig.add_subplot()
+    ds.all_data()
+    hrpt = 'PartType1' if 'PartType2' in ds.particle_types else 'PartType4'
+    lrpt = 'PartType2' if 'PartType2' in ds.particle_types else 'PartType1'
+    rhohr,(prof,npart) = rho_prof(ds=ds,radius=(500,'kpc'),stretch='nan',pt=hrpt)
+    rhohr = rhohr.to("code_mass/kpc**3")
+    r = prof.x.to("pc")
+    hrl, = ax.loglog(r,rhohr,'.-',label=f"t={signif(ds.current_time.to('Myr'),2)} HR DM ")
+    r0 = r
+    rholr,(prof,npart) = rho_prof(ds=ds,radius=(500,'kpc'),stretch='nan',pt=lrpt)
+    rholr = rholr.to("code_mass/kpc**3")
+    rlr = prof.x.to("pc")
+    r0 = np.unique([*r0,*rlr]) * rlr.units
+    lrl, = ax.loglog(rlr,rholr,'.',markersize=2,label=f"_Lo-res DM",color=hrl.get_color())
+    
+    rho_αβγ130 = get_αβγ_prof(r0.to('kpc').v,)
+    rho_αβγNFW = get_αβγ_prof(r0.to('kpc').v,γ=0)
+    corel, = ax.loglog(r0, rho_αβγ130,label=f'({1},{3},{0})')
+    cuspl, = ax.loglog(r0, rho_αβγNFW,label=f'({1},{3},{1})')
+    mass_unit = ds.mass_unit.to("Msun")
+    mus = latex_float(mass_unit)
+    ax.set_xlabel(f"r ({r.units})")
+    ax.set_ylabel(f'ρ$(r)$ (${mus}$' r' M$_{{\odot}}$/kpc$^3$)')
+    ax.legend()
+    return hrl,lrl,corel,cuspl
+
+
+# %% [markdown]
 # ## COM and COMs class defs
 
 # %%
@@ -508,6 +867,7 @@ class COM:
     all = None
     name_mapping = None
     ptype_list = None
+    __is_COM__ = True
     def __init__(self,ds,*,name_mapping={'dm':'PartType1','stars':'PartType4','bh':'PartType5'}):
         self.filename = ds.filename
         ad = ds.all_data()
@@ -542,6 +902,9 @@ class COM:
             return self.time<other.time
         else:
             return NotImplemented
+        
+    def __getitem__(self,name):
+        return self.__dict__[name]
 
 # want time-ordered list of COM - would be nice to insert in order, but can also just sort at end
 # want method to obtain bulk position (possibly at given times) - use interpolation?
@@ -555,13 +918,13 @@ import yt
 
 class COMs:
     splunit = 1
-    def __init__(self,list=None):
+    def __init__(self,lst=None):
         self.coms = SortedKeyList(key=attrgetter('time'))
         self.spldict = {}
-        if list is not None:
-            if not isinstance(list[0],COM):
-                list = [COM(l) for l in getattr(list,'piter','iter')()]
-            self.coms.update(list)
+        if lst is not None:
+            if not getattr(lst[0],'__is_COM__',False):
+                lst = [COM(l) for l in (lst.piter() if hasattr(lst,'piter') else iter(lst))]
+            self.coms.update(lst)
             self.make_splines()
         
     def copy_from(self,old):
@@ -640,10 +1003,12 @@ class COMs:
         ax = fig.add_subplot()
         xl = []
         yl = []
-        ls = ["solid","dashed","dotted"]
-        lw = [3,1,1]
+        ls = ["solid","dashed","dotted","dashdot"]
+        lw = [3,1,1,1]
         t = unyt_array([com.time for com in self.coms])
-        for ind,ptype in enumerate(["all","dm","bh"]):
+        for ind,ptype in enumerate(["all","dm","bh","stars"]):
+            if ptype not in self.spldict.keys():
+                continue
             xyz = self.get_bulk(ptype=ptype)
             line=plot_color_varying_line(xyz[:,0],xyz[:,1],t,fig=fig,ax=ax,resize=True,label=f"{ptype} CoM")
             line.set_linewidth(lw[ind])
@@ -704,6 +1069,16 @@ def add_particle_acceleration(ds,ftype="PartType5",force_override=False):
             force_override=force_override,
         )
 
+def add_all_acceleration(ds):
+    #print('Adding accelerations')
+    #print(f'Available particle types: {ds.particle_types}')
+    for i in range(6):
+        pt = f'PartType{i}'
+        if pt not in ds.particle_types:
+            continue
+        #print(f'Adding acceleration for {pt}')
+        add_particle_acceleration(ds,ftype=pt)
+        
 # I cannot get the following to work. As far as I can tell, I'm using validators
 # correctly 
 # add as new field going forward
@@ -942,8 +1317,9 @@ class FakeParticleTrajectory:
         self.trajs = []
         for t in trajs:
             self.trajs.append(t)
-        self._keys = trajs.keys()
-        self.indices = trajs.indices
+        if len(trajs)>0:
+            self._keys = trajs.keys()
+            self.indices = trajs.indices
     
     def __iter__(self):
         return iter(self.trajs)
@@ -984,9 +1360,12 @@ class Simulation:
             path = path.resolve().parent
         return path
     
+    def simname(self):
+        return self.folder.name
+    
     def __repr__(self):
         return str(self.folder)
-        
+    
     def process_sim(self,*,unit_base=None,bounding_box=None,**kwargs):
         if unit_base is None:
             unit_base = {
@@ -1005,10 +1384,12 @@ class Simulation:
                                                              log_level='warning',
                                                              bounding_box=bounding_box,
                                                              unit_base=unit_base,
+                                                             setup_function=add_all_acceleration,
                                                             **kwargs)
         print('Computing CoMs...',end='')
         coms = COMs(ts)
         print('done')
+        print(f'Sim lasts for {signif(coms[-1].time.to("Myr").v,3)} Myr')
 
         ptype='PartType5'
         fields = [
@@ -1018,18 +1399,24 @@ class Simulation:
             (ptype, "particle_velocity_x"),
             (ptype, "particle_velocity_y"),
             (ptype, "particle_velocity_z"),
-            (ptype, "particle_acceleration_x"),
-            (ptype, "particle_acceleration_y"),
-            (ptype, "particle_acceleration_z"),
+            #(ptype, "particle_acceleration_x"),
+            #(ptype, "particle_acceleration_y"),
+            #(ptype, "particle_acceleration_z"),
+            #(ptype, "Acceleration"),
             (ptype, "Masses"),
         ]
         ds = ts[0]
         # We expect indices to look something like [100001,200002], depending
         # on the number of particles. This way is more flexible, assuming the 
         # of BHs stays small
-        indices = ds.r[ptype,'ParticleIDs'].v
-        trajs = ts.particle_trajectories(indices, fields=fields, ptype=ptype)
-        print(f'Loaded {len(trajs)} trajectories')
+        # This section only works if BHs are present
+        if (ptype,'ParticleIDs') in ds.field_list:
+            indices = ds.r[ptype,'ParticleIDs'].v
+            trajs = ts.particle_trajectories(indices, fields=fields, ptype=ptype)
+            print(f'Loaded {len(trajs)} trajectories')
+        else:
+            trajs = []
+            print(f'No BHs present')
         self.ts = ts
         self.coms = coms
         self.trajs = trajs
@@ -1079,6 +1466,7 @@ class Simulation:
                                               log_level='warning',
                                               bounding_box=self.bounding_box,
                                               unit_base=self.unit_base,
+                                              setup_function=add_all_acceleration,
                                               **kwargs) 
         print('Finished')
         
@@ -1090,6 +1478,7 @@ class Simulation:
                                                                 log_level='warning',
                                                                 bounding_box=self.bounding_box,
                                                                 unit_base=self.unit_base,
+                                                                setup_function=add_all_acceleration,
                                                                 **kwargs)
         missing_inds = np.setdiff1d(allinds,self.inds)
         print(f'Missing {len(missing_inds)} snapshots')
@@ -1117,6 +1506,27 @@ class Simulation:
             self.save_sim()
         else:
             print(f"Sim updated. Don't forget to save it!")
+    
+    def _read_param_file(self):
+        import re
+        file = sim.folder/Path(f'{sim.simname()}.params')
+        paramfile = file.read_text()
+        lines = re.split('\n+',paramfile)
+        params = {}
+        for line in lines:
+            if line.startswith('%') or line.startswith('#'):
+                continue
+            line = re.sub(r'\%.*','',line)
+            if len(line)==0:
+                continue
+            m = re.match(r'(\w+)\s+(\S+)\s*',line)
+            params[m.group(1)] = m.group(2)
+        return params
+    
+    def get_parameter(self,param):
+        if not hasattr(self,'_params'):
+            self._params = self._read_param_file()
+        return self._params[param]
 
     def downsample_ts(self,num_snaps):
         idxs = np.round(np.linspace(0,len(self.names)-1,min(len(self.names),num_snaps))).astype(int)
@@ -1140,6 +1550,133 @@ class Simulation:
             ind = np.argmin(np.abs(times-time))
         return ind
     
+    def plotds(self,ds=None,*,width=(300,'kpc'),**kwargs):
+        if ds is None:
+            ds = self.ts[-1]
+        if isinstance(ds,int):
+            ds = self.ts[ds]
+        col_field = ("PartType1","Masses")
+        ad = ds.all_data() # make sure the data is loaded and particle fields are populated
+        hrpt = 'PartType1' if 'PartType2' in ds.particle_types else 'PartType4'
+        lrpt = 'PartType2' if 'PartType2' in ds.particle_types else 'PartType1'
+        plot = yt.ParticleProjectionPlot(ds,"z",(hrpt,'particle_ones'),col_field,width=width,window_size=(3,3),origin='native',**kwargs)
+        if ('PartType5','Coordinates') in ds.field_list:
+            plot.annotate_particles(20,ptype="PartType5",col="orange",p_size=10,alpha=0.75)
+        if (lrpt,'Coordinates') in ds.field_list:
+            plot.annotate_particles(20,ptype=lrpt,col='red',p_size=10,alpha=0.1)
+        plot.annotate_timestamp(time_unit="Myr",draw_inset_box=True)
+        return plot,col_field,None
+    
+    def _get_frame_inds(self,*,num_frames=20,tsinds=None,**kwargs):
+        ts = self.ts
+        idxs = np.linspace(0,len(ts)-1,num=min(num_frames,len(ts))).astype(int)
+        return idxs
+    
+    @staticmethod
+    def _gen_animation_name(figpath,idxs):
+        return Path(f'{figpath}_f{idxs[-1]}_n{len(idxs)}.gif')
+    
+    def make_animation(self,*,figpath=None,tsinds=None,**kwargs):
+        ts = self.ts
+        idxs = self._get_frame_inds(**kwargs)
+        if tsinds is None:
+            ts = [ts[i] for i in idxs]
+        else:
+            ts = [ts[tsinds[i]] for i in idxs]
+        if figpath is None:
+            figpath = (Path.home() / Path(f'storage/figures/darknanograv/{self.simname()}'))
+            figpath = figpath.expanduser().resolve()
+            figpath = Simulation._gen_animation_name(figpath,idxs)
+            print(f'Creating new animation: {figpath}')
+        ani = make_animation_from_images(ts,partial(self.plotds,**kwargs),figpath)
+        return ani
+    
+    def animate(self,*,figpath=None,overwrite=False,**kwargs):
+        if figpath is None:
+            figpath = (Path.home() / Path(f'storage/figures/darknanograv/{self.simname()}'))
+        idxs = self._get_frame_inds(**kwargs)
+        figpath = Simulation._gen_animation_name(figpath,idxs)
+        if figpath.exists() and not overwrite:
+            print(f'Loading animation from file: {figpath}')
+            ani = load_animation_from_file(figpath)
+        else:
+            print(f'Creating animation {figpath}')
+            ani = self.make_animation(figpath=figpath,**kwargs)
+        return ani
+        
+    def prof_ds(self,dsind,*,ax=None,**kwargs):
+        raise NotImplementedError('Still under construction')
+        newfig = False
+        if ax is None:
+            fig = plt.figure(**kwargs)
+            ax = fig.add_subplot()
+            newfig = True
+        ds = self.ts[dsind]
+        ad = ds.all_data()
+        hrpt = 'PartType1' if 'PartType2' in ds.particle_types else 'PartType4'
+        lrpt = 'PartType2' if 'PartType2' in ds.particle_types else 'PartType1'
+        rhohr,(prof,npart) = rho_prof(ds=ds,radius=(500,'kpc'),stretch='nan',pt=hrpt)
+        
+        
+    def make_density_prof(self,*,ax=None,num_lines=5,center=None,
+                          save_fig=False,figpath=None,
+                          **kwargs):
+        newfig = False
+        if ax is None:
+            fig = plt.figure(**kwargs)
+            ax = fig.add_subplot()
+            newfig = True
+        # TODO: need to figure out center stuff
+        if center is None:
+            center='all'
+        ts = self.downsample_ts(num_lines)
+        for i,ds in enumerate(ts):
+            ds.all_data()
+            time = ds.current_time
+            print(f'Looking at ds={Path(ds.filename).stem} at {time.v=} Myr',end='')
+            hrpt = 'PartType1' if 'PartType2' in ds.particle_types else 'PartType4'
+            lrpt = 'PartType2' if 'PartType2' in ds.particle_types else 'PartType1'
+            c = self.coms.get_bulk(time=time,ptype=center).to('kpc')
+            sph = ds.sphere(center=c,radius=(1,'Mpc'))
+            print(f' centered at {sph.center}')
+            rhohr,(prof,npart) = rho_prof(sphere=sph,stretch='nan',pt=hrpt)
+            rhohr = rhohr.to("code_mass/kpc**3")
+            r = prof.x.to("pc")
+            hr, = ax.loglog(r,rhohr,'.-',label=f"t={signif(time.to('Myr'),2)} HR DM ")
+            if i==0:
+                r0 = r
+            else:
+                r0 = np.unique([*r0,*r])*r.units
+            
+            rholr,(prof,npart) = rho_prof(sphere=sph,stretch='nan',pt=lrpt)
+            rholr = rholr.to("code_mass/kpc**3")
+            rlr = prof.x.to("pc")
+            r0 = np.unique([*r0,*rlr]) * rlr.units
+            ax.loglog(rlr,rholr,'.',markersize=2,label=f"_Lo-res DM",color=hr.get_color())
+
+        rho_αβγ130 = get_αβγ_prof(r0.to('kpc').v,)
+        rho_αβγNFW = get_αβγ_prof(r0.to('kpc').v,γ=0)
+        ax.loglog(r0, rho_αβγ130,label=f'({1},{3},{0})')
+        ax.loglog(r0, rho_αβγNFW,label=f'({1},{3},{1})')
+        mass_unit = ds.mass_unit.to("Msun")
+        mus = latex_float(mass_unit)
+        ax.set_xlabel(f"r ({r.units})")
+        ax.set_ylabel(f'ρ$(r)$ (${mus}$' r' M$_{{\odot}}$/kpc$^3$)')
+        ax.legend()
+        #handles, labels = ax1.get_legend_handles_labels()
+        #fig.legend(handles, labels, loc='outside right')
+        #fig.tight_layout()
+        #fig.subplots_adjust(wspace=0.6*4)
+        if save_fig:
+            if figpath is None:
+                figpath = (Path.home() / Path(f'storage/figures/darknanograv/{self.simname()}_dens_prof'))
+                tend = signif(self.ts[-1].current_time.to('Myr'),2).astype(int)
+                figpath = Path(f'{figpath}_tf{tend}.pdf')
+            fig = ax.get_figure()
+            fig.savefig(figpath,bbox_inches='tight')
+            return fig
+        if newfig:
+            return ax
 
 
 # %%
@@ -1684,6 +2221,10 @@ print(comproc.stderr.decode())
 # 4. Merge evolved halos as normal
 
 # %% [markdown]
+# Some notes:
+# According to [1402.0005](https://arxiv.org/abs/1402.0005) (Shapiro's paper on cusps), the BH eats any DM particle at $r<4M=\frac{4GM}{c^2}\sim10^{-5}\text{ pc }\left(\frac{M}{10^8 M_{\odot}}\right)$ and any star with radius $R$, mass $m$ at $r<R(M/m)^{1/3}$
+
+# %% [markdown]
 # #### Generate a single halo first
 # To generate a two component single halo, we need to figure out some things: 
 # 1. Number of low-res and high-res DM particles - $10^4$ and $10^5$?
@@ -2210,7 +2751,7 @@ ax.plot(np.abs(ω[idx]).to('nanohertz')/(2*np.pi),h[idx],'.')
 # %% [markdown]
 # # Analyzing bridges2 combinations
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ## Overall animations
 
 # %% jupyter={"source_hidden": true}
@@ -2239,8 +2780,14 @@ ts,(tsinds,dsnamelist) = load_timeseries_from_folder(foldername,bounding_box=[[-
 # %%
 def plotmerger(ds,*,width=(300,'kpc'),**kwargs):
     col_field = ("PartType1","Masses")
-    plot = yt.ParticleProjectionPlot(ds,"z",col_field,width=width,window_size=(3,3),origin='native',**kwargs)
-    plot.annotate_particles(20,ptype="PartType5",col="orange",p_size=10,alpha=0.75)
+    ad = ds.all_data() # make sure the data is loaded and particle fields are populated
+    hrpt = 'PartType1' if 'PartType2' in ds.particle_types else 'PartType4'
+    lrpt = 'PartType2' if 'PartType2' in ds.particle_types else 'PartType1'
+    plot = yt.ParticleProjectionPlot(ds,"z",(hrpt,'particle_ones'),col_field,width=width,window_size=(3,3),origin='native',**kwargs)
+    if ('PartType5','Coordinates') in ds.field_list:
+        plot.annotate_particles(20,ptype="PartType5",col="orange",p_size=10,alpha=0.75)
+    if (lrpt,'Coordinates') in ds.field_list:
+        plot.annotate_particles(20,ptype=lrpt,col='red',p_size=10,alpha=0.1)
     plot.annotate_timestamp(time_unit="Myr",draw_inset_box=True)
     return plot,col_field,None
 
@@ -2377,7 +2924,7 @@ def animate_merger(sim,*,num_points=50,step=5,offset=0):
 ani = animate_merger(sim,num_points=5,step=1,offset=390)
 ani
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ## Circular analysis
 
 # %% jupyter={"source_hidden": true}
@@ -2646,7 +3193,7 @@ ax4.set_ylabel(r"$\rho(r)/\rho_{130}$")
 handles, labels = ax.get_legend_handles_labels()
 fig.legend(handles, labels, loc='right')
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ### Compare cdm and sidm
 
 # %%
@@ -2713,6 +3260,141 @@ ax2.set_xlim(ax1.get_xlim())
 ax2.set_ylim(ax1.get_ylim())
 fig.legend(handles, labels, loc='outside right')
 fig.subplots_adjust(wspace=0.3)
+
+# %%
+
+# %% [markdown]
+# ## Comparing velocity dispersions and also hern vs herndm
+
+# %%
+ishern = yt.load('/ocean/projects/phy240001p/mryan1/runs/spike_test_hedm/IC-twosideA-hern-gizmo.hdf5',bounding_box=[[-2e3,2e3]]*3)
+ishabg = yt.load('/ocean/projects/phy240001p/mryan1/runs/spike_test_habg/IC-twosideA-habg-gizmo.hdf5',bounding_box=[[-2e3,2e3]]*3)
+iswiBH = yt.load('/ocean/projects/phy240001p/mryan1/runs/spike_test_wBH/IC-twosideA-wiBH-gizmo.hdf5',bounding_box=[[-2e3,2e3]]*3)
+fig = plt.figure(figsize=(9,3))
+axes = [fig.add_subplot(121+i) for i in range(2)]
+ics = [ishern,ishabg]
+ics = [ishern,iswiBH]
+for ds in ics:
+    hrl,lrl,corel,cuspl = prof_ds(ds,ax=axes[0])
+    lrl.set_label('_LR')
+    hrl.set_label(f'{Path(ds.filename).parent.stem}')
+    corel.set_label('_core')
+    cuspl.set_label('_cusp')
+    hrl,lrl = plot_dispersion(None,ax=axes[1],p=1,ds=ds,radius=(1,'Mpc'))
+    lrl.set_label('_LR')
+    hrl.set_label(f'{Path(ds.filename).parent.stem}')
+for ax in axes:
+    ax.legend()
+
+# %%
+folder = '/ocean/projects/phy240001p/mryan1/runs/spike_test_hern/'
+simhern = Simulation(folder)
+folder = '/ocean/projects/phy240001p/mryan1/runs/spike_test_hedm/'
+simhedm = Simulation(folder)
+folder = '/ocean/projects/phy240001p/mryan1/runs/spike_test_habg/'
+simhabg = Simulation(folder)
+folder = '/ocean/projects/phy240001p/mryan1/runs/spike_test_hesl/'
+simhesl = Simulation(folder)
+folder = '/ocean/projects/phy240001p/mryan1/runs/spike_test_wBH/'
+simwiBH = Simulation(folder)
+fig = plt.figure(figsize=(8,8))
+axes=[fig.add_subplot(221+i) for i in range(4)]
+sima = [simhern,simhedm]
+sima = [simhern,simhabg]
+sima = [simhesl,simhabg]
+sima = [simhesl,simwiBH]
+for i,s in enumerate(sima):
+    for j,dsi in enumerate([0,-1]):
+        ds = s.ts[dsi]
+        ai = i+2*j
+        #plot_num_particles(None,ax=axes[ai],ds=ds,radius=(1,'Mpc'))
+        plot_dispersion(None,ax=axes[ai],p=1,ds=ds,radius=(1,'Mpc'))
+        axes[ai].set_title(f'{s.simname()} t={signif(ds.current_time.to("Myr"),2)} Myr')
+fig.subplots_adjust(wspace=0.3,hspace=0.3)
+
+# %% [markdown]
+# ### Density Profile
+
+# %% jupyter={"outputs_hidden": true, "source_hidden": true}
+#simhedm.animate()
+simwiBH.make_density_prof(num_lines=9,center='bh')
+
+# %%
+fig=plt.figure(figsize=(9,4))
+axes = [fig.add_subplot(121+i) for i in range(2)]
+simhern.make_density_prof(num_lines=5,ax=axes[0])
+simwiBH.make_density_prof(num_lines=5,ax=axes[1],center='bh')
+axes[0].set_title(r'no BH ($v_0=20$)')
+axes[0].set_title(r'Hern (CDM)')
+axes[1].set_title(r'w/ BH ($v_0=10$)')
+fig.subplots_adjust(wspace=0.3)
+
+# %% [markdown]
+# ### Number of particles
+
+# %%
+sim = simwiBH
+fig = plt.figure(figsize=(9,4))
+axes=[fig.add_subplot(121+i) for i in range(2)]
+for i,dsi in enumerate([0,-1]):
+    ds = sim.ts[dsi]
+    com = sim.coms[dsi]
+    ax = axes[i]
+    shells = get_shells(ds=ds,radius=(1,'Mpc'))
+    bins = get_shell_bins(shells)
+    for center in ['bh','all','stars','dm']:
+        if not hasattr(com,center):
+            continue
+        c = com.__dict__[center]
+        hrl,lrl = plot_num_particles(None,ds=ds,radius=(1,'Mpc'),center=c,override_bins=bins,ax=ax,)
+        hrl.set_label(f'{center} at {[signif(x,3) for x in c.to("pc").v]} pc')
+        lrl.set_label(f'_{lrl.get_label()}')
+    ax.set_title(f't={signif(ds.current_time.to("Myr").v,3)} Myr')
+    # note we've hard-coded the units here. Be careful!
+    ax.set_xlabel('r from center (pc)')
+    ax.legend()
+
+# %% [markdown]
+# ### Mean free path
+
+# %%
+from yt.units import kilometer as km
+from yt.units import second
+sim = simwiBH
+v0,sigma0=(float(sim.get_parameter('DM_InteractionVelocityScale'))*km/second,float(sim.get_parameter('DM_InteractionCrossSection'))*cm**2/g)
+print(f'Sim uses {v0=} and {sigma0=}')
+#v0,sigma0=(20*km/second,1*cm**2/g)
+sigma_over_m = lambda v,sigma0,v0:sigma0/(1+(v/v0)**(4))
+fig=plt.figure(figsize=(9,4))
+ax = fig.add_subplot(121)
+ax2 = fig.add_subplot(122)
+for i,dsi in enumerate([0,-1]):
+    ds = sim.ts[dsi]
+    hrline,lrline = plot_mean_free_path(ds=ds,ax=ax,radius=(1,'Mpc'),sigma_over_m=partial(sigma_over_m,sigma0=sigma0,v0=v0))
+    hrline.set_label(f't={signif(ds.current_time.to("Myr").v,3)} Myr')
+    lrline.set_label(f'_{lrline.get_label()}')
+    hrline,lrline = plot_relax_time(ds=ds,ax=ax2,radius=(1,'Mpc'),sigma_over_m=partial(sigma_over_m,sigma0=sigma0,v0=v0))
+    hrline.set_label(f't={signif(ds.current_time.to("Myr").v,3)} Myr')
+    lrline.set_label(f'_{lrline.get_label()}')
+ax.legend()
+ax2.legend()
+fig.subplots_adjust(wspace=0.3)
+
+# %% [markdown]
+# ### Notes
+# Previous run of habg goes about 20 Myr. The relaxation time is on the order of a Gyr. So we need to be simulating for 50 times as long if the current rate holds up. That is $128*5*50=32,000$ cpu hours. That's not super tenable for generating ICs. Hopefully the rankfile will help, but it looks like it's only doubling the generation rate, instead of doing any better. Might be able to do better than 2-1 with a different rank file. Mike Grudic's example was using 4-1 I think.
+#
+# #### 02/25
+#  - HABG problems and other might be related to softening length? but at the same time, the _initial_ velocity dispersion is clearly way different. I have no idea why though!
+#  - I'm rerunning habg with substantially increased softening length (using the same as was being used for the stars). I also upped the max timestep, that seems to be speeding up the sim too, which is nice, but slightly concerning. 
+#    - Definitely not the softening length. Sim still explodes. Though maybe faster than before? Probably a symptom of upping the max timestep
+# #### 03/04
+#  - BH influence radius ($r_h$) is $\sim100$ pc. The mfp is supposed to be significantly greater than that.
+#  - Try running hires with 10^5 and 10^6 particles
+#  - Send Manoj link to spheric github
+#  - Add list of updates to spheric repo
+
+# %%
 
 # %% [markdown]
 # # Todo List
