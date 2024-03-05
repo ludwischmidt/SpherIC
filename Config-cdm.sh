@@ -52,13 +52,13 @@ USE_FFTW3
 #NOTYPEPREFIX_FFTW
 DOUBLEPRECISION_FFTW
 OUTPUT_TIMESTEP
-OUTPUT_ACCELERATION
+#OUTPUT_ACCELERATION
 #INPUT_IN_DOUBLEPRECISION
 OUTPUT_IN_DOUBLEPRECISION
 #INPUT_POSITIONS_IN_DOUBLE
 #POPIIIBHSEED
 
-DM_SIDM=2
+#DM_SIDM=2
 ### New flags for Igor's version
 ## Needed regardless of what SIDM version is used:
 PMAXLOW
@@ -66,11 +66,11 @@ PMAXLOW
 SIDM_ISOTROPIC
 #SIDM_ANISOTROPIC
 ## SIDM versions:
-DM_SIDM_GIZMO
-#DM_SIDM_AREPO
+#DM_SIDM_GIZMO
+##DM_SIDM_AREPO
 # AREPO SIDM flags
-#DM_SIDM_VIS # For Yukawa scattering
-#DM_SIDM_RES # For resonance scattering. Note new DM_g parameter
+##DM_SIDM_VIS # For Yukawa scattering
+##DM_SIDM_RES # For resonance scattering. Note new DM_g parameter
 ## Needed regardless of SIDM on/off:
 GRAVSOFTFACTOR
 

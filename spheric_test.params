@@ -12,8 +12,17 @@
 %----  Relevant files (filenames and directories)
 %InitCondFile                ../projects/spheric/runs/IC-gadget.bin   % IC file
 %OutputDir                   output/spheric_test_gadget     % name (full path or sub-folder name) for outputs
-InitCondFile                ../projects/spheric/runs/IC-gizmo   % IC file
-OutputDir                   output/spheric_test_gizmo     % name (full path or sub-folder name) for outputs
+%InitCondFile                ../projects/spheric/runs/IC-gizmo   % IC file
+%OutputDir                   output/spheric_test_gizmo     % name (full path or sub-folder name) for outputs
+%InitCondFile                ../projects/spheric/runs/IC-testmove-gizmo   % IC file
+%OutputDir                   output/testmove     % name (full path or sub-folder name) for outputs
+InitCondFile                ../projects/spheric/runs/IC-randomNFW-gizmo   % IC file
+OutputDir                   output/randomNFW     % name (full path or sub-folder name) for outputs
+%InitCondFile                ../projects/spheric/runs/IC-random130-gizmo   % IC file
+%OutputDir                   output/random130     % name (full path or sub-folder name) for outputs
+%InitCondFile                ../projects/spheric/runs/IC-combined   % IC file
+%OutputDir                   output/combined     % name (full path or sub-folder name) for outputs
+
 
 %---- File formats (input and output)
 ICFormat                    3   % format of IC file: 1=unformatted (gadget) binary, 3=hdf5, 4=cluster
@@ -30,11 +39,12 @@ NumFilesWrittenInParallel   1   % must be < N_processors & power of 2 [Default=1
 %---- Output frequency
 % Use this if Comoving off
 TimeOfFirstSnapshot         0.0   % time (code units) of first snapshot
-TimeBetSnapshot             0.05   % time between snapshot writes (if OutputListOn=0), code units
+TimeBetSnapshot             0.005   % time between snapshot writes (if OutputListOn=0), code units
+%TimeBetSnapshot             0.01   % time between snapshot writes (if OutputListOn=0), code units
 % If Comoving on
 %TimeOfFirstSnapshot          0.00990099 % time (expansion factor) of first snapshot
 %ScaleFac_Between_Snapshots         1.0005
-#TimeBetStatistics           0.1  % code time between additional statistics (e.g. energy) [Default=infinity]
+%TimeBetStatistics           0.1  % code time between additional statistics (e.g. energy) [Default=infinity]
 
 %---- CPU run-time and checkpointing time-limits
 TimeLimitCPU                100000  % wall-clock timelimit for sim in seconds, before self-stop [Default=1 day]
@@ -43,19 +53,23 @@ CpuTimeBetRestartFile       7200  	% wall-clock time between restartfile writes,
 %---- Desired simulation beginning and end times (in code units) for run
 % Use these if Comoving off
 TimeBegin                   0.0     % Code-unit time at the beginning of the simulation
-TimeMax                     0.1709     % Code-unit time at the end of the simulation (run will stop)
+%TimeMax                     0.1709     % Code-unit time at the end of the simulation (run will stop)
+%TimeMax                     1.709
+%TimeMax                      5
+TimeMax                      12
 % Use these if Comoving on
 %TimeBegin                    0.00990099 % Expansion factor at beginning of simulation
 %TimeMax                      1       % Expansion factor at end of simulation
 
 %---- Maximum and minimum timesteps allowed
 MaxSizeTimestep             0.00005e3   % maximum timestep in code units, set for your problem
-MinSizeTimestep             1.0e-12 % minimum timestep (code units). set this very low, or get the wrong answer [Default=0]
+MinSizeTimestep             1.0e-12 % minimum timestep (code units). set this very low, or get the wrong answer [Default=0]12
 
 
 %---- System of units. This defines what one 'code unit' is in CGS, so it can be converted for subroutines like cooling, etc.
 UnitLength_in_cm            3.085678e21       % 1 kpc. This means a code unit is 1 pc/h [see User Guide for details]
-UnitMass_in_g               1.989e43          % This example code unit is 10^10 solar masses/h
+%UnitMass_in_g               1.989e43          % This example code unit is 10^10 solar masses/h
+UnitMass_in_g               1.989e45          % This example code unit is 10^12 solar masses/h
 UnitVelocity_in_cm_per_s    1.0e5             % 1 km/sec
 UnitMagneticField_in_gauss  1.0               % 1 gauss
 GravityConstantInternal     0                 % Set the value of 'G' in code units, if desired. calculated by code if =0 [Default=0]
@@ -146,3 +160,23 @@ BlackHoleRadiativeEfficiency 0.1        % radiative efficiency (for accretion an
 
 %--- feedback
 BlackHoleFeedbackFactor      1.0	    % generic feedback strength multiplier
+
+%-------------------------------------------------------------------------------------------------
+%------------------ Non-Standard Dark Matter, Dark Energy, Gravity, or Expansion -----------------
+%-------------------------------------------------------------------------------------------------
+
+%-------------- Parameters for non-standard or time-dependent Gravity/Dark Energy/Expansion (GR_TABULATED_COSMOLOGY on)
+%DarkEnergyConstantW       -1        % time-independent DE parameter w, used only if no table
+%TabulatedCosmologyFile    CosmoTbl  % table with cosmological parameters
+
+%-------------- Parameters for self-interacting dark matter (DM_SIDM on)
+DM_InteractionCrossSection    10     % cross-section per unit mass in cm^2/g (normalized at 1 km/s, if vel-dependent)
+DM_InteractionVelocityScale   0     % velocity [code units]: if>0, cross-section scales ~1/(1+(v/v0)^4) above this "v0"
+DM_DissipationFactor          0     % 0=elastic, 1=pure dissipative (fractional dissipation of kinetic energy in event)
+DM_KickPerCollision           0     % velocity 'kick' [code units] per collision (this^2=specific energy/mass released)
+
+%-------------- Parameters for scalar-field dark matter (DM_FUZZY on)
+%FuzzyDM_Mass_in_eV        1e-22     % boson mass in eV for SFDM/Fuzzy DM module
+
+%------------------------------------New Stuff----------------------------------------------------
+GravSoftFactor                1.0

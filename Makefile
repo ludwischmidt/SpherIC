@@ -23,7 +23,7 @@ LIBS    = -L$(LIBRARY_PATH) -I$(INCLUDE)
 LIBS    += -lhdf5 -lhdf5_hl -lz
 endif
 
-LIBS    += -lm
+LIBS    += -lm -lgsl -lgslcblas
 
 # Object definition
 

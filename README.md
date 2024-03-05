@@ -3,7 +3,7 @@
 This is a basic Readme for the SpherIC package. This version of SpherIC
 contains edits by Michael Ryan (mryan4@uci.edu). 
 
-For SpherIC documentation, see doc/spherIC.pdf.
+For the main SpherIC documentation, see doc/spherIC.pdf.
 
 # Primary edits
 1. Added gizmo hdf5 output (using the `-ogh` flag). If `MBH`>0, this will 
@@ -15,13 +15,26 @@ For SpherIC documentation, see doc/spherIC.pdf.
 	`-dvx/dvy/dvz` arguments)
 3. Fixed gadget binary not being written under certain compilers due to 
 	improper use of assert
+4. **EXPERIMENTAL** Added generic $(\alpha,\beta,\gamma)$-type profile
+    for stellar particles. This is in active development and may not work
+    correctly. It currently seems to be able to reproduce the Hernquist and
+    Plummer output profiles correctly but YMMV. The arguments for using this
+    profile are `-starabg`, `-as #`, `-bs #`, `-cs #`, `-rss #`, and `-rcuts #`
+    with the same meanings as for the Halo inputs. 
 
 **WARNING**: The gizmo output does not currently support the `-nostarpot`
 option.
 
+Some additional changes have been made, mostly for bugfixes.
+
 # Compiling Notes
 Since we now include hdf5 output, the hdf5 libraries need to be included. This
-has been accomplished by switching the default compiler from gcc to h5cc. 
+has been accomplished by switching the default compiler from gcc to h5cc. This
+doesn't work on the Bridges2 cluster, so some logic has been added to the 
+Makefile to test and account for running SpherIC on that system. If you develop
+a workaraound for another system that needs special Makefile instructions, 
+please submit a PR or send me a message, and I'll try to add it in to the main
+branch.
 
 Note that depending on your compiler (for example, the version of `gcc` 
 provided in conda), the `assert(expression)` statement may or may not actually
