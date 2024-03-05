@@ -1,7 +1,10 @@
 # Readme
 
-This is a basic Readme for the SpherIC package. This version of SpherIC
-contains edits by Michael Ryan (mryan4@uci.edu). 
+This is a basic Readme for the SpherIC package, written by Miguel Rocha. 
+If you use this software, please cite [10.1093/mnras/stt984](https://doi.org/10.1093/mnras/stt984)
+aka [1301.3137](https://arxiv.org/abs/1301.3137).
+
+This version of SpherIC contains edits by Michael Ryan (mryan4@uci.edu). 
 
 For the main SpherIC documentation, see doc/spherIC.pdf.
 
@@ -20,7 +23,10 @@ For the main SpherIC documentation, see doc/spherIC.pdf.
     correctly. It currently seems to be able to reproduce the Hernquist and
     Plummer output profiles correctly but YMMV. The arguments for using this
     profile are `-starabg`, `-as #`, `-bs #`, `-cs #`, `-rss #`, and `-rcuts #`
-    with the same meanings as for the Halo inputs. 
+    with the same meanings as for the Halo inputs.
+5. Added `spheric.py` to run SpherIC from within python. The python file
+    contains the `SphericOptions` class and the `spheric([options])` function.
+    Please read the file for more information about the options.
 
 **WARNING**: The gizmo output does not currently support the `-nostarpot`
 option.
