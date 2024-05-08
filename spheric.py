@@ -2,6 +2,7 @@ import inspect
 import numbers
 import subprocess
 import numpy as np
+import copy
 from pathlib import Path
 
 class SphericOptions:
@@ -66,6 +67,11 @@ class SphericOptions:
         s = s + ")"
         return s
 
+    def copy(self,**kwargs):
+      s = copy.copy(self)
+      s.__dict__.update(kwargs)
+      return s
+  
     def generateOptionString(self):
         # Determine attributes programmatically since maybe options will change in future
         # Code pulled from https://stackoverflow.com/a/9058322
