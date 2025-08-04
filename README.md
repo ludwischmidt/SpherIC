@@ -42,6 +42,9 @@ a workaraound for another system that needs special Makefile instructions,
 please submit a PR or send me a message, and I'll try to add it in to the main
 branch.
 
+For the `starabg` flag we also use the gsl libraries. So you'll need gsl
+installed. This is often already provided on clusters using the module system.
+
 Note that depending on your compiler (for example, the version of `gcc` 
 provided in conda), the `assert(expression)` statement may or may not actually
 run `expression`. Since much of the output files were written using 

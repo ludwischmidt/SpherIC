@@ -566,7 +566,7 @@ void write_gizmo(char *fname, const PARTICLE *bh, const SI *si){
   }
   gh.time = 0;
   gh.num_files = 1;
-  gh.flag_doubleprecision = 0;
+  gh.flag_doubleprecision = 1;
   gh.BoxSize = 0; // This is ignored by gizmo but used by other software
   // The following are ignored as per gizmo-public/scripts/make_IC.py.
   // Most of them are set in the params or Config file
