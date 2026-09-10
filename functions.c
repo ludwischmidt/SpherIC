@@ -331,7 +331,7 @@ DOUBLE d2rhodPhi2(DOUBLE r, const SI *si) {
   SP *sp;
   sp = si->sp;
 	
-  if(si->nostarpot_flag == 1 || si->king_flag == 0){
+  if(si->nostarpot_flag == 1 || si->stars_flag == 0){
     Mencr = MencHalo(r,si);
     rhor = rho(r,si);
   }	
