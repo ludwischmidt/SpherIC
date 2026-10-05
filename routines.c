@@ -378,15 +378,13 @@ void calculate_parameters(SI *si) {
           usage();
         }
         si->starsp->rdecay = CutoffFac*si->starsp->rcutoff;
-        //si->starsp->delta = si->starsp->rcutoff/si->starsp->rdecay + dlrhodlr(si->starsp->rcutoff,si);
-        si->starsp->delta = si->starsp->rcutoff/si->starsp->rdecay + si->starsp->rcutoff/rhoABG(si->starsp->rcutoff,si)*drhoABGdr(si->starsp->rcutoff,si);
+        si->starsp->delta = si->starsp->rcutoff/si->starsp->rdecay + dlrhodlr(si->starsp->rcutoff,si);
       }
-      si->starsp->rho0 = 1.0;
       si->rinner = FACTORRINNER*si->starsp->rs;
       si->routerStar = si->starsp->rcutoff;
       if(si-> halo_flag == 1){
         si->routerStar = si->router;
-      } else 	si->routerStar = si->starsp->rs*500; //else 	si->routerStar = si->sp->rs*500;
+      } else 	si->routerStar = si->sp->rs*500;
     }
     if (si-> halo_flag == 0) si->router = si->routerStar;
 
