@@ -174,6 +174,7 @@ typedef struct systeminfo {
   INT starabg_flag;
   INT stars_flag;
   INT nostarpot_flag;
+  INT noBHpot_flag;
   INT dorvirexact;
   //Structure
   SP *sp;

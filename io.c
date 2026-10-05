@@ -38,20 +38,20 @@ void write_gridr(FILE *file,const SI *si) {
   }
 	
   if(halo_flag == 1 && stars_flag == 0){
-    fprintf(file,"#     0             1             2             3\n");
-    fprintf(file,"#     r          rhoHalo       MencHalo        Pot\n");
+    fprintf(file,"#     0             1             2             3             4\n");
+    fprintf(file,"#     r          rhoHalo       MencHalo        Menc          Pot\n");
     for (i = 0; i < NGRIDR; i++) {
-      fprintf(file,OFD2" "OFD2" "OFD2" "OFD2"\n",
-	      gridr->r[i],gridr->rhoHalo[i],gridr->MencHalo[i],gridr->Pot[i]);
+      fprintf(file,OFD2" "OFD2" "OFD2" "OFD2" "OFD2"\n",
+	      gridr->r[i],gridr->rhoHalo[i],gridr->MencHalo[i],gridr->Menc[i],gridr->Pot[i]);
     }
   }
 	
   if(halo_flag == 0 && stars_flag == 1){
-    fprintf(file,"#     0             1             2             3\n");
-    fprintf(file,"#     r          rhoStar       MencStar        Pot\n");
+    fprintf(file,"#     0             1             2             3             4\n");
+    fprintf(file,"#     r          rhoStar       MencStar        Menc          Pot\n");
     for (i = 0; i < NGRIDR; i++) {
-      fprintf(file,OFD2" "OFD2" "OFD2" "OFD2"\n",
-	      gridr->r[i],gridr->rhoStar[i],gridr->MencStar[i],gridr->Pot[i]);
+      fprintf(file,OFD2" "OFD2" "OFD2" "OFD2" "OFD2"\n",
+	      gridr->r[i],gridr->rhoStar[i],gridr->MencStar[i],gridr->Menc[i],gridr->Pot[i]);
     }
   }
 	

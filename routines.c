@@ -499,7 +499,17 @@ void initialise_gridr( PARTICLE *bh, SI *si) {
   gridr->rhoenc[i] = gridr->rhoencHalo[i] + gridr->rhoencStar[i];
   gridr->logrhoenc[i] = log(gridr->rhoenc[i]);
   si->logrhoenc[i] = log(gridr->rhoenc[i]);
-  gridr->Menc[i] = bh->mass + gridr->MencHalo[i] + gridr->MencStar[i]; 
+
+  gridr->Menc[i] = 0.0;
+  if (si->halo_flag == 1) {
+    gridr->Menc[i] += gridr->MencHalo[i];
+  }
+  if (si->stars_flag == 1 && si->nostarpot_flag == 0) {
+    gridr->Menc[i] += gridr->MencStar[i];
+  }
+  if (si->noBHpot_flag == 0) {
+    gridr->Menc[i] += bh->mass;
+  }
   gridr->logMenc[i] = log(gridr->Menc[i]);
   si->logMenc[i] = log(gridr->Menc[i]);
   gridr->eqrvcmax[i] = gridr->Menc[i] - 4*M_PI*gridr->rho[i]*r3; 
@@ -558,37 +568,45 @@ void initialise_gridr( PARTICLE *bh, SI *si) {
     gridr->rhoenc[i] = gridr->rhoencHalo[i] + gridr->rhoencStar[i];
     gridr->logrhoenc[i] = log(gridr->rhoenc[i]);
     si->logrhoenc[i] = log(gridr->rhoenc[i]);
-    gridr->Menc[i] = gridr->MencHalo[i] + gridr->MencStar[i]; 
+
+    gridr->Menc[i] = 0.0;
+    if (si->halo_flag == 1) {
+      gridr->Menc[i] += gridr->MencHalo[i];
+    }
+    if (si->stars_flag == 1 && si->nostarpot_flag == 0) {
+      gridr->Menc[i] += gridr->MencStar[i];
+    }
+    if (si->noBHpot_flag == 0) {
+      gridr->Menc[i] += bh->mass;
+    }
+
     gridr->logMenc[i] = log(gridr->Menc[i]);
     si->logMenc[i] = log(gridr->Menc[i]);
     gridr->eqrvcmax[i] = gridr->Menc[i] - 4*M_PI*gridr->rho[i]*r3; 
   }
 	
+  /* Outermost grid point: no mass outside, so Potoutr = 0 */
   i = NGRIDR-1;
-  Potoutr = 0; /* approximate outer gridpoint by 0 */
-  if(si->nostarpot_flag == 1 || si->stars_flag == 0){
-    Potr = (-1)*G*(gridr->MencHalo[i]/gridr->r[i] + Potoutr);
-  } else if (si->halo_flag == 1){
-    Potr = (-1)*G*(gridr->Menc[i]/gridr->r[i]+Potoutr);
-  }else{	
-    Potr = (-1)*G*(gridr->MencStar[i]/gridr->r[i] + Potoutr);
-  }
-  gridr->Pot[i] = Potr;
-  gridr->logPot[i] = log(-Potr);
+  Potoutr = 0.0;
+  Potr = (-1)*G*(gridr->Menc[i]/gridr->r[i] + Potoutr);
+  gridr->Pot[i]     = Potr;
+  gridr->logPot[i]  = log(-Potr);
   gridr->Potoutr[i] = Potoutr;
-  for (i = (NGRIDR-2); i >= 0; i--) {
-    if(si->nostarpot_flag == 1 || si->stars_flag == 0){
-      Potoutr = integral(integrandPotHalo,gridr->r[i],gridr->r[i+1],si) + gridr->Potoutr[i+1];
-      Potr = (-1)*G*(gridr->MencHalo[i]/gridr->r[i] + Potoutr);
-    } else if (si->halo_flag == 1){
-      Potoutr = integral(integrandPotHalo,gridr->r[i],gridr->r[i+1],si) + integral(integrandPotStar,gridr->r[i],gridr->r[i+1],si) + gridr->Potoutr[i+1];
-      Potr = (-1)*G*(gridr->Menc[i]/gridr->r[i] + Potoutr);
-    } else if (si->halo_flag == 0){	
-      Potoutr = integral(integrandPotStar,gridr->r[i],gridr->r[i+1],si) + gridr->Potoutr[i+1];
-      Potr = (-1)*G*(gridr->MencStar[i]/gridr->r[i] + Potoutr);	
+
+  /* Remaining grid points, from the outside in */
+  for (i = NGRIDR-2; i >= 0; i--) {
+
+    /* Contribution of the shells outside r[i] (the BH has none) */
+    Potoutr = gridr->Potoutr[i+1];
+    if (si->halo_flag == 1) {
+      Potoutr += integral(integrandPotHalo, gridr->r[i], gridr->r[i+1], si);
     }
-    gridr->Pot[i] = Potr;
-    gridr->logPot[i] = log(-Potr);
+    if (si->stars_flag == 1 && si->nostarpot_flag == 0) {
+      Potoutr += integral(integrandPotStar, gridr->r[i], gridr->r[i+1], si);
+    }
+    Potr = (-1)*G*(gridr->Menc[i]/gridr->r[i] + Potoutr);
+    gridr->Pot[i]     = Potr;
+    gridr->logPot[i]  = log(-Potr);
     gridr->Potoutr[i] = Potoutr;
   }
 }
@@ -1434,6 +1452,7 @@ void usage() {
   fprintf(stderr,"-oift               : set this flag to write positions for IFRIT binary file \n");
   fprintf(stderr,"-opfs               : set this flag to write a table of density profiles in an ASCII file\n");
   fprintf(stderr,"-nostarpot          : set this flag for excluding the stellar potential \n");
+  fprintf(stderr,"-noBHpot            : set this flag for excluding the black hole potential \n");
   fprintf(stderr,"-randomseed <value> : set this flag for setting a value for a random seed (default: random value)\n");
   fprintf(stderr,"-dorvirexact        : set this flag for calculating rvir exactly via N^2 sum - Warning: time consuming for large N!\n");
   fprintf(stderr,"\nNote: The -starabg flag is only intended for use with GIZMO initial conditions (-ogh). Usage elsewhere is not tested.\n");
