@@ -81,6 +81,7 @@ int main(int argc, char **argv) {
   si->plummer_flag = 0;
   si->stars_flag = 0;
   si->nostarpot_flag = 0;
+  si->noBHpot_flag = 0;
 	
   sprintf(INPUTNAME,"none");
 
@@ -122,6 +123,10 @@ int main(int argc, char **argv) {
     }
     else if (strcmp(argv[i],"-nostarpot") == 0) {
       si->nostarpot_flag = 1;
+      i++;
+    }
+    else if (strcmp(argv[i],"-noBHpot") == 0) {
+      si->noBHpot_flag = 1;
       i++;
     }
     /*

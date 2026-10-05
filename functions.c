@@ -330,16 +330,15 @@ DOUBLE d2rhodPhi2(DOUBLE r, const SI *si) {
   DOUBLE fac1, fac2;
   SP *sp;
   sp = si->sp;
-	
-  if(si->nostarpot_flag == 1 || si->stars_flag == 0){
-    Mencr = MencHalo(r,si);
-    rhor = rho(r,si);
-  }	
-  else{
-    Mencr = Menc(r,si);
-    rhor = rho(r,si) + si->sp->K*rhoStar(r,si);
+
+  Mencr = Menc(r,si);
+  rhor = 0.0;
+  if (si->halo_flag == 1) {
+    rhor += rho(r,si);
   }
-		
+  if (si->stars_flag == 1 && si->nostarpot_flag == 0) {
+    rhor += si->sp->K*rhoStar(r,si);
+  }
 		
   fac1 = r*r/(G*G*Mencr*Mencr);
   fac2 = 2*r-4*M_PI*r*r*r*r*rhor/Mencr;
@@ -1308,18 +1307,15 @@ DOUBLE d2rhoStardPhi2(DOUBLE r, const SI *si) {
     if (r >= rt*0.9999) return(0.0);
   }
 
-  if(si->nostarpot_flag == 1){
-    Mencr = MencHalo(r,si);
-    rhor = rho(r,si);
-  }	
-  else if(si->halo_flag == 1){
-    Mencr = Menc(r,si);
-    rhor = rho(r,si) + K*rhoStar(r,si);
+  
+  Mencr = Menc(r,si);
+  rhor = 0.0;
+  if (si->halo_flag == 1) {
+    rhor += rho(r,si);
   }
-  else {
-    Mencr = MencStar(r,si);
-    rhor = K*rhoStar(r,si);
-  }	
+  if (si->stars_flag == 1 && si->nostarpot_flag == 0) {
+    rhor += K*rhoStar(r,si);
+  }
 				
   fac1 = r*r/(G*G*Mencr*Mencr);
   fac2 = 2*r-4*M_PI*r*r*r*r*rhor/Mencr;
